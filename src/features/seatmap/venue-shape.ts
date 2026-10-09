@@ -85,6 +85,9 @@ export function medianSeatSpacing(seats: FeatureCollection): number {
   return gaps[Math.floor(gaps.length / 2)];
 }
 
+/** Bề rộng thế giới (px) ở zoom 0 của MapLibre (tile 512) trên 360 đơn vị kinh độ */
+export const PX_PER_UNIT_Z0 = 512 / 360;
+
 /**
  * Góc chữ trên màn hình cho nhãn dải dài khi map xoay `bearing` độ: `rotate` đo lúc bearing 0,
  * chuẩn hoá về [-90, 90) để chữ không bao giờ lộn ngược. Khớp với `uprightRotate` trong build-style.

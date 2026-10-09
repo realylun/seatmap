@@ -11,7 +11,7 @@ import {
   seatStates,
   sectionStates,
 } from "./feature-states";
-import { labelFeatures, labelRotation } from "./labels";
+import { labelFeatures, labelFitZoom, labelRotation } from "./labels";
 import { parseMapVenue, toMapVenue } from "./map-venue";
 import {
   colorKey,
@@ -163,6 +163,27 @@ describe("labels", () => {
     expect(Math.abs(labelRotation(diagonal))).toBeCloseTo(45);
     const fc = labelFeatures(toMapVenue(venue).sections);
     expect(fc.features.map((f) => f.properties.label)).toEqual(["101", "102"]);
+  });
+
+  it("shows a label only from the zoom where its text fits inside the section", () => {
+    const box = (w: number, h: number): [number, number][] => [
+      [0, 0],
+      [w, 0],
+      [w, h],
+      [0, h],
+      [0, 0],
+    ];
+    const big = labelFitZoom(box(2, 1), "T8-139");
+    const small = labelFitZoom(box(0.2, 0.1), "T8-139");
+    expect(small).toBeGreaterThan(big);
+    // tên dài cần section rộng hơn tên ngắn
+    expect(labelFitZoom(box(0.2, 0.1), "1")).toBeLessThan(small);
+    // section quá nhỏ thì không bao giờ hiện
+    expect(labelFitZoom(box(0.0001, 0.0001), "T8-139")).toBe(Infinity);
+    const fc = labelFeatures(toMapVenue(venue).sections);
+    expect(
+      fc.features.every((f) => typeof f.properties.minzoom === "number"),
+    ).toBe(true);
   });
 });
 

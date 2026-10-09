@@ -7,7 +7,9 @@ import type {
   StyleSpecification,
   SymbolLayerSpecification,
 } from "maplibre-gl";
+import { LABEL_SIZE_STOPS, LABEL_ZOOM_STEPS } from "./labels";
 import type { MapVenue } from "./map-venue";
+import { PX_PER_UNIT_Z0 } from "./venue-shape";
 
 export const SWITCH_LEVEL = 5;
 export const SEAT_LEVEL = 6.2;
@@ -42,8 +44,6 @@ export const COLORS = {
 
 /** Bán kính ghế / khoảng cách 2 ghế: < 0.5 để còn khe trắng giữa các ghế */
 const SEAT_RADIUS_RATIO = 0.42;
-/** Bề rộng thế giới (px) ở zoom 0 của MapLibre (tile 512) trên 360 đơn vị kinh độ */
-const PX_PER_UNIT_Z0 = 512 / 360;
 
 const FONT_REGULAR = ["Open Sans Regular"];
 const FONT_BOLD = ["Open Sans Bold"];
@@ -222,6 +222,17 @@ function seatLayers(spacing: number): LayerSpecification[] {
   ];
 }
 
+/** Nhãn chỉ hiện từ zoom mà chữ vừa section (properties.minzoom, labels.ts) */
+const labelOpacity: ExpressionSpecification = [
+  "step",
+  ["zoom"],
+  0,
+  ...LABEL_ZOOM_STEPS.flatMap((zoom) => [
+    zoom,
+    ["case", ["<=", ["get", "minzoom"], zoom], 1, 0] as ExpressionSpecification,
+  ]),
+] as ExpressionSpecification;
+
 // Nhãn luôn theo màn hình: dải dài đã được tính sẵn góc dọc theo dải và giữ không lộn ngược
 // theo bearing hiện tại (labels.ts), nên xoay sân 3D chữ vẫn đọc được
 function sectionLabelLayer(): SymbolLayerSpecification {
@@ -232,17 +243,18 @@ function sectionLabelLayer(): SymbolLayerSpecification {
     layout: {
       "text-field": ["get", "label"],
       "text-font": FONT_REGULAR,
-      "text-size": byZoom(4, 9.5, 5, 13, 7, 24, 9, 48),
+      "text-size": byZoom(...LABEL_SIZE_STOPS),
       "text-padding": 0,
       "text-rotate": ["get", "rotate"],
       "text-rotation-alignment": "viewport",
       "text-pitch-alignment": "map",
-      // luôn hiện, nằm dưới viên giá, không đẩy viên giá đi
+      // nằm dưới viên giá, không đẩy viên giá đi; ẩn/hiện bằng text-opacity
       "text-allow-overlap": true,
       "text-ignore-placement": true,
     },
     paint: {
       "text-color": COLORS.label,
+      "text-opacity": labelOpacity,
       "text-halo-color": "#ffffff",
       "text-halo-width": 0.5,
     },
