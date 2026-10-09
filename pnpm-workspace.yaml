@@ -5,6 +5,8 @@
 # sharp có prebuilt binary (@img/sharp-*), không cần chạy install script.
 allowBuilds:
   sharp: false
+  esbuild: true
+  tesseract.js: false
 strictDepBuilds: true
 
 # Supply-chain: chỉ cài bản đã publish ≥ 1 ngày, chặn dep con từ git/tarball,

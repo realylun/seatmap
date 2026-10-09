@@ -32,6 +32,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -42,3 +43,11 @@ next-env.d.ts
 
 # omc
 .omc/
+
+# local blob storage (no BLOB_READ_WRITE_TOKEN)
+/public/local-blob/
+/public/seed/
+
+# playwright
+/test-results/
+/playwright-report/

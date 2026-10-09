@@ -1,0 +1,103 @@
+"use client";
+
+import type { Listing, ListingSort } from "@/domain/seats/listings";
+import type { Tier } from "@/features/seatmap/availability";
+import { ListingCard } from "./ListingCard";
+import type { ListingBadge } from "./listing-filters";
+import { ListingFilters } from "./ListingFilters";
+
+type Props = {
+  listings: readonly Listing[];
+  /** Badge tính trên toàn bộ listing (trước khi lọc theo section) */
+  badges: ReadonlyMap<string, ListingBadge>;
+  tiers: readonly Tier[];
+  loading: boolean;
+  error: string | null;
+  canBuy: boolean;
+  quantity: number;
+  onQuantity: (quantity: number) => void;
+  tierIds: ReadonlySet<string>;
+  onToggleTier: (tierId: string) => void;
+  sort: ListingSort;
+  onSort: (sort: ListingSort) => void;
+  hoveredSection: string | null;
+  selectedSection: string | null;
+  onHover: (section: string | null) => void;
+  onClearSection: () => void;
+  onPick: (listing: Listing) => void;
+};
+
+function EmptyList({
+  loading,
+  error,
+}: {
+  loading: boolean;
+  error: string | null;
+}) {
+  const text =
+    error ?? (loading ? "Loading tickets…" : "No tickets match your filters.");
+  return (
+    <output className="block px-5 py-10 text-center text-muted">{text}</output>
+  );
+}
+
+export function ListingPanel(props: Props) {
+  const tierById = new Map(props.tiers.map((t) => [t.id, t]));
+  return (
+    <section aria-label="Tickets" className="flex min-h-0 flex-col bg-white">
+      <ListingFilters
+        quantity={props.quantity}
+        onQuantity={props.onQuantity}
+        tiers={props.tiers}
+        tierIds={props.tierIds}
+        onToggleTier={props.onToggleTier}
+        sort={props.sort}
+        onSort={props.onSort}
+      />
+      {!props.canBuy && (
+        <p className="border-b border-line bg-amber-50 px-5 py-2 text-sm text-amber-900">
+          This event has ended. The seat map is view only.
+        </p>
+      )}
+      {props.selectedSection && (
+        <div className="flex items-center justify-between border-b border-line px-5 py-2 text-sm">
+          <span>
+            Showing <b>Section {props.selectedSection}</b>
+          </span>
+          <button
+            type="button"
+            onClick={props.onClearSection}
+            className="font-semibold text-accent hover:underline"
+          >
+            Show all
+          </button>
+        </div>
+      )}
+      <p className="px-5 pt-3 text-sm text-muted" aria-live="polite">
+        {props.listings.length} listings
+      </p>
+      {props.listings.length === 0 ? (
+        <EmptyList loading={props.loading} error={props.error} />
+      ) : (
+        <ul className="min-h-0 flex-1 overflow-y-auto">
+          {props.listings.map((l) => {
+            const tier = tierById.get(l.tierId);
+            return (
+              <ListingCard
+                key={l.id}
+                listing={l}
+                badge={props.badges.get(l.id) ?? null}
+                quantity={props.quantity}
+                tierName={tier?.name ?? ""}
+                tierColor={tier?.color ?? "#888888"}
+                hovered={props.hoveredSection === l.section}
+                onHover={props.onHover}
+                onPick={props.onPick}
+              />
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
+}
