@@ -4,6 +4,8 @@ import { formatRemaining } from "@/features/checkout/format";
 import {
   filterListings,
   listingBadges,
+  LISTING_PAGE_SIZE,
+  nextRenderCount,
   seatRangeLabel,
   toggleTier,
 } from "./listing-filters";
@@ -85,5 +87,17 @@ describe("listingBadges", () => {
     expect(byBadge("cheapest")).toEqual(["101A"]);
     expect(byBadge("cheapest-in-section")).toEqual(["102A", "103A"]);
     expect(listingBadges([]).size).toBe(0);
+  });
+});
+
+describe("nextRenderCount", () => {
+  it("renders one more page, never past the total", () => {
+    expect(nextRenderCount(LISTING_PAGE_SIZE, 7544)).toBe(
+      LISTING_PAGE_SIZE * 2,
+    );
+    expect(nextRenderCount(LISTING_PAGE_SIZE, LISTING_PAGE_SIZE + 3)).toBe(
+      LISTING_PAGE_SIZE + 3,
+    );
+    expect(nextRenderCount(10, 0)).toBe(0);
   });
 });

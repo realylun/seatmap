@@ -1,6 +1,7 @@
 import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { templateVersions, templates } from "@/db/schema";
+import { serializeGeometry } from "@/domain/venue/geometry-json";
 import { DEFAULT_EXTENT, buildVenue } from "@/domain/venue/venue-file";
 import { editorBlockSchema, venueSchema } from "@/domain/venue/types";
 import type { PutJson } from "../blob";
@@ -83,7 +84,7 @@ export async function publishVersion(
 
   const { url } = await putJson(
     `geometry/${templateId}/v${version}.json`,
-    JSON.stringify(venue.data),
+    serializeGeometry(venue.data),
   );
   const sectionCount = venue.data.sections.length;
   const [row] = await db

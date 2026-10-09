@@ -1,9 +1,14 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import type { Listing, ListingSort } from "@/domain/seats/listings";
 import type { Tier } from "@/features/seatmap/availability";
 import { ListingCard } from "./ListingCard";
-import type { ListingBadge } from "./listing-filters";
+import {
+  LISTING_PAGE_SIZE,
+  nextRenderCount,
+  type ListingBadge,
+} from "./listing-filters";
 import { ListingFilters } from "./ListingFilters";
 
 type Props = {
@@ -41,8 +46,34 @@ function EmptyList({
   );
 }
 
+/**
+ * Render listing theo đợt: đợt đầu LISTING_PAGE_SIZE, cuộn tới sentinel cuối danh sách thì thêm
+ * một đợt. Tổng số listing vẫn hiển thị đủ ở dòng "N listings".
+ */
+function useRenderCount(total: number) {
+  const [count, setCount] = useState(LISTING_PAGE_SIZE);
+  // callback ref vào state: effect chạy lại khi sentinel mount/unmount
+  const [sentinel, setSentinel] = useState<HTMLLIElement | null>(null);
+  const hasMore = count < total;
+  useEffect(() => {
+    if (!sentinel || !hasMore) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) setCount((c) => nextRenderCount(c, total));
+      },
+      { root: sentinel.parentElement, rootMargin: "400px" },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [sentinel, hasMore, total]);
+  return { renderCount: count, hasMore, setSentinel };
+}
+
 export function ListingPanel(props: Props) {
   const tierById = new Map(props.tiers.map((t) => [t.id, t]));
+  const { renderCount, hasMore, setSentinel } = useRenderCount(
+    props.listings.length,
+  );
   return (
     <section aria-label="Tickets" className="flex min-h-0 flex-col bg-white">
       <ListingFilters
@@ -80,7 +111,7 @@ export function ListingPanel(props: Props) {
         <EmptyList loading={props.loading} error={props.error} />
       ) : (
         <ul className="min-h-0 flex-1 overflow-y-auto">
-          {props.listings.map((l) => {
+          {props.listings.slice(0, renderCount).map((l) => {
             const tier = tierById.get(l.tierId);
             return (
               <ListingCard
@@ -96,6 +127,7 @@ export function ListingPanel(props: Props) {
               />
             );
           })}
+          {hasMore && <li ref={setSentinel} aria-hidden className="h-px" />}
         </ul>
       )}
     </section>

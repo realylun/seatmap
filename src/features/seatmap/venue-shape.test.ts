@@ -85,6 +85,23 @@ describe("medianSeatSpacing", () => {
     expect(medianSeatSpacing(seats)).toBeCloseTo(0.3);
   });
 
+  it("stays fast on a stadium-sized section (40,000 seats)", () => {
+    const seats = {
+      type: "FeatureCollection" as const,
+      features: Array.from({ length: 200 * 200 }, (_, i) =>
+        seat(
+          String(Math.floor(i / 200)),
+          (i % 200) + 1,
+          (i % 200) * 0.1,
+          Math.floor(i / 200) * 0.2,
+        ),
+      ),
+    };
+    const started = performance.now();
+    expect(medianSeatSpacing(seats)).toBeCloseTo(0.1);
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+
   it("is 0 without seats", () => {
     expect(medianSeatSpacing({ type: "FeatureCollection", features: [] })).toBe(
       0,

@@ -71,3 +71,11 @@ export function listingBadges(
   }
   return badges;
 }
+
+/** Số listing render mỗi đợt: sân lớn có hàng nghìn listing, render hết một lần treo UI vài giây */
+export const LISTING_PAGE_SIZE = 50;
+
+/** Số listing render sau khi cuộn tới cuối: thêm một đợt, không vượt tổng */
+export function nextRenderCount(current: number, total: number): number {
+  return Math.min(current + LISTING_PAGE_SIZE, total);
+}

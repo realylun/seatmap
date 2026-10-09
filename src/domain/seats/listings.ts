@@ -49,8 +49,10 @@ type SellableSeat = {
 
 type Group = Omit<Listing, "isCheapest" | "isCheapestInSection">;
 
-const natural = (a: string, b: string) =>
-  a.localeCompare(b, "en", { numeric: true });
+// Collator dùng chung: localeCompare kèm options dựng collator mới mỗi lần gọi — chậm ~20× khi
+// sắp hàng trăm nghìn ghế (sân 135k chỗ)
+const collator = new Intl.Collator("en", { numeric: true });
+const natural = (a: string, b: string) => collator.compare(a, b);
 
 const isNumber = (s: string) => /^\d+$/.test(s);
 
