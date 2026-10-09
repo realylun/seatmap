@@ -1,3 +1,20 @@
-ignoredBuiltDependencies:
-  - sharp
-  - unrs-resolver
+# pnpm 12 settings — https://pnpm.io/settings
+# (.npmrc chỉ còn dùng cho registry/auth)
+
+# Build scripts của dependencies phải được duyệt rõ ràng.
+# sharp có prebuilt binary (@img/sharp-*), không cần chạy install script.
+allowBuilds:
+  sharp: false
+strictDepBuilds: true
+
+# Supply-chain: chỉ cài bản đã publish ≥ 1 ngày, chặn dep con từ git/tarball,
+# và từ chối bản mới có mức trust (provenance) thấp hơn bản trước.
+minimumReleaseAge: 1440
+blockExoticSubdeps: true
+trustPolicy: no-downgrade
+
+# Fail khi Node không thỏa "engines" trong package.json.
+engineStrict: true
+
+# Tự cài lại deps khi lockfile lệch trước `pnpm run`/`pnpm exec`.
+verifyDepsBeforeRun: install
