@@ -21,6 +21,13 @@ Without `BLOB_READ_WRITE_TOKEN`, template geometry and uploaded images are writt
 Other commands: `pnpm test` (PGlite, no Docker needed), `pnpm test:neon` (concurrency test on
 `DATABASE_URL_TEST`), `pnpm test:e2e`, `pnpm typecheck`, `pnpm lint`.
 
+`pnpm test:e2e` creates extra templates/events in the dev database; run `pnpm db:seed` afterwards
+to get back to the clean demo data.
+
+AT&T Stadium is seeded from `data/venues/att-stadium.svg` (see `docs/seatmap-svg-spec.md`). To
+regenerate it from the PNG: `pnpm svg:from-png data/venues/att-stadium.png data/venues/att-stadium.svg 0.12`
+(last argument = seat spacing in map units).
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

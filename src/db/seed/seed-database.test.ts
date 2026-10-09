@@ -10,6 +10,7 @@ import {
 } from "@/db/schema";
 import { createTestDb } from "@/test/pglite";
 import { SEED_EVENTS, SEED_TIERS } from "./data";
+import { venueFileFromSvg } from "./svg-source";
 import {
   hashString,
   planTierSections,
@@ -19,13 +20,12 @@ import {
   type SeedDeps,
 } from "./seed-database";
 
-const readVenue = (name: string): unknown =>
-  JSON.parse(
-    readFileSync(
-      new URL(`../../../data/venues/${name}`, import.meta.url),
-      "utf8",
-    ),
+const readData = (name: string) =>
+  readFileSync(
+    new URL(`../../../data/venues/${name}`, import.meta.url),
+    "utf8",
   );
+const readVenue = (name: string): unknown => JSON.parse(readData(name));
 
 describe("helper thuần", () => {
   it("seededRandom lặp lại được, trong [0,1)", () => {
@@ -70,6 +70,7 @@ describe("seedDatabase trên PGlite", () => {
     venueFiles: {
       rosetta: readVenue("venue.rosetta.json"),
       sample: readVenue("venue.sample.json"),
+      att: venueFileFromSvg(readData("att-stadium.svg")),
     },
     backgroundUrls: { rosetta: "https://blob.test/bg.png" },
     now: new Date("2026-10-09T00:00:00Z"),
@@ -83,7 +84,7 @@ describe("seedDatabase trên PGlite", () => {
   });
 
   it(
-    "tạo 2 version, 8 event on_sale (5 trending), ghế = 8 × seatCount, chạy lại vẫn vậy",
+    "tạo 3 version, 11 event on_sale (7 trending), ghế = tổng seatCount, chạy lại vẫn vậy",
     { timeout: 120_000 },
     async () => {
       await seedDatabase(ctx.db, deps); // lần 1 → lần 2 phải truncate sạch
@@ -92,8 +93,8 @@ describe("seedDatabase trên PGlite", () => {
       const seatCount = Object.fromEntries(
         summary.versions.map((v) => [v.map, v.seatCount]),
       );
-      expect(seatCount).toEqual({ rosetta: 10278, sample: 1313 });
-      expect(summary.versions.map((v) => v.sectionCount)).toEqual([95, 3]);
+      expect(seatCount).toEqual({ rosetta: 10278, sample: 1313, att: 12371 });
+      expect(summary.versions.map((v) => v.sectionCount)).toEqual([95, 3, 672]);
       const expectedSeats = SEED_EVENTS.reduce(
         (n, e) => n + seatCount[e.venue],
         0,
@@ -109,14 +110,18 @@ describe("seedDatabase trên PGlite", () => {
       const [{ value: versionRows }] = await db
         .select({ value: count() })
         .from(templateVersions);
-      expect([eventRows, seatRows, versionRows]).toEqual([8, expectedSeats, 2]);
+      expect([eventRows, seatRows, versionRows]).toEqual([
+        11,
+        expectedSeats,
+        3,
+      ]);
       expect(uploads.at(-1)).toMatch(/^geometry\/.+\/v1\.json$/);
 
       const rows = await db.select().from(events);
       expect(rows.every((e) => e.status === "on_sale" && e.imageUrl)).toBe(
         true,
       );
-      expect(rows.filter((e) => e.isTrending)).toHaveLength(5);
+      expect(rows.filter((e) => e.isTrending)).toHaveLength(7);
       const [bg] = await db
         .select()
         .from(templates)

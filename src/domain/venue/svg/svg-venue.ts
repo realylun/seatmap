@@ -4,8 +4,8 @@
 // Spec cho designer: docs/seatmap-svg-spec.md
 import { centroid } from "../geometry";
 import { extentForImage, pixelProjector } from "../projection";
-import type { Extent, Point, VenueObject } from "../types";
-import type { SectionDraft } from "../venue-file";
+import type { EditorBlock, Extent, Point, VenueObject } from "../types";
+import { addSections, toEditorBlock, type SectionDraft } from "../venue-file";
 import { flatten, parseSvg, type SvgNode } from "./parse-svg";
 import {
   buildSection,
@@ -172,4 +172,13 @@ export function svgToDrafts(text: string): SvgImport {
     objects: hasError ? [] : field.objects,
     issues,
   };
+}
+
+/** Kết quả import SVG → block editor thay thế toàn bộ (id khu duy nhất qua addSections) */
+export function blockFromSvg(
+  svg: Pick<SvgImport, "extent" | "drafts" | "objects">,
+): EditorBlock {
+  const empty = { extent: svg.extent, sections: [], selectedId: null };
+  const { sections } = addSections(empty, svg.drafts);
+  return toEditorBlock({ extent: svg.extent, sections, objects: svg.objects });
 }

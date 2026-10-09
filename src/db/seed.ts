@@ -8,12 +8,14 @@ import { getPoolDb } from "./client";
 import type { SeedMapKey } from "./seed/data";
 import { assertSeedAllowed } from "./seed/guard";
 import { seedDatabase } from "./seed/seed-database";
+import { venueFileFromSvg } from "./seed/svg-source";
 
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 const DATA_DIR = join(ROOT, "data/venues");
 const VENUE_FILE: Record<SeedMapKey, string> = {
   rosetta: "venue.rosetta.json",
   sample: "venue.sample.json",
+  att: "att-stadium.svg",
 };
 
 async function uploadBackground(key: SeedMapKey, file: string) {
@@ -27,7 +29,9 @@ async function uploadBackground(key: SeedMapKey, file: string) {
 }
 
 async function readVenueFile(key: SeedMapKey): Promise<unknown> {
-  return JSON.parse(await readFile(join(DATA_DIR, VENUE_FILE[key]), "utf8"));
+  const file = VENUE_FILE[key];
+  const text = await readFile(join(DATA_DIR, file), "utf8");
+  return file.endsWith(".svg") ? venueFileFromSvg(text) : JSON.parse(text);
 }
 
 async function main() {
@@ -37,9 +41,11 @@ async function main() {
     const venueFiles = {
       rosetta: await readVenueFile("rosetta"),
       sample: await readVenueFile("sample"),
+      att: await readVenueFile("att"),
     };
     const backgroundUrls = {
       rosetta: await uploadBackground("rosetta", "rosetta-arena.png"),
+      att: await uploadBackground("att", "att-stadium.png"),
     };
     const summary = await seedDatabase(db, {
       putJson,

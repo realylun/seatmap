@@ -18,11 +18,8 @@ import {
   type SectionDraft,
   type VenueDraft,
 } from "@/domain/venue/venue-file";
-import type { SvgImport } from "@/domain/venue/svg/svg-venue";
-
+export { blockFromSvg } from "@/domain/venue/svg/svg-venue";
 export { toEditorBlock };
-
-type SvgDrafts = Pick<SvgImport, "extent" | "drafts" | "objects">;
 
 export type EditorState = VenueDraft & {
   readonly objects: readonly VenueObject[];
@@ -72,13 +69,6 @@ export function initEditorState(
 /** File venue.json người dùng chọn → block editor; throw Error có thông báo thân thiện */
 export function readImportedFile(json: unknown): EditorBlock {
   return toEditorBlock(importFile(initialEditorState, json));
-}
-
-/** Kết quả import SVG → block editor thay thế toàn bộ (id khu duy nhất qua addSections) */
-export function blockFromSvg(svg: SvgDrafts): EditorBlock {
-  const empty = { ...initialEditorState, extent: svg.extent };
-  const { sections } = addSections(empty, svg.drafts);
-  return toEditorBlock({ extent: svg.extent, sections, objects: svg.objects });
 }
 
 const bump = (state: EditorState): EditorState => ({

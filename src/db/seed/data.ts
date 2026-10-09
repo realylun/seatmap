@@ -1,6 +1,7 @@
-// Dữ liệu demo: 2 venue (Hà Nội dùng map Rosetta, TP.HCM dùng map mẫu), 8 event, bảng giá theo loại.
+// Dữ liệu demo: 3 venue (Hà Nội dùng map Rosetta, TP.HCM dùng map mẫu, AT&T Stadium dựng từ SVG),
+// 11 event, bảng giá theo loại.
 
-export type SeedMapKey = "rosetta" | "sample";
+export type SeedMapKey = "rosetta" | "sample" | "att";
 
 export type SeedVenue = {
   readonly key: SeedMapKey;
@@ -40,6 +41,13 @@ export const SEED_VENUES: readonly SeedVenue[] = [
     city: "Ho Chi Minh City",
     address: "12 Nguyễn Huệ, Quận 1, TP.HCM",
     templateName: "Saigon Hall — khán đài chính",
+  },
+  {
+    key: "att",
+    name: "AT&T Stadium",
+    city: "Arlington, TX",
+    address: "1 AT&T Way, Arlington, TX 76011",
+    templateName: "AT&T Stadium — SVG",
   },
 ];
 
@@ -128,6 +136,30 @@ export const SEED_EVENTS: readonly SeedEvent[] = [
     category: "shows",
     venue: "sample",
     inDays: 54,
+    trending: false,
+  },
+  {
+    slug: "karol-g-tropitour-att-stadium",
+    name: "KAROL G - VIAJANDO POR EL MUNDO TROPITOUR",
+    category: "music",
+    venue: "att",
+    inDays: 8,
+    trending: true,
+  },
+  {
+    slug: "dallas-cowboys-vs-philadelphia-eagles",
+    name: "Dallas Cowboys vs Philadelphia Eagles",
+    category: "sports",
+    venue: "att",
+    inDays: 22,
+    trending: true,
+  },
+  {
+    slug: "monster-jam-arlington",
+    name: "Monster Jam Arlington",
+    category: "shows",
+    venue: "att",
+    inDays: 44,
     trending: false,
   },
 ];
