@@ -71,6 +71,7 @@ describe("seedDatabase trên PGlite", () => {
       rosetta: readVenue("venue.rosetta.json"),
       sample: readVenue("venue.sample.json"),
       att: venueFileFromSvg(readData("att-stadium.svg")),
+      trongdong: venueFileFromSvg(readData("trong-dong.svg")),
     },
     backgroundUrls: { rosetta: "https://blob.test/bg.png" },
     now: new Date("2026-10-09T00:00:00Z"),
@@ -84,8 +85,8 @@ describe("seedDatabase trên PGlite", () => {
   });
 
   it(
-    "tạo 3 version, 11 event on_sale (7 trending), ghế = tổng seatCount, chạy lại vẫn vậy",
-    { timeout: 120_000 },
+    "tạo 4 version, 14 event on_sale (9 trending), ghế = tổng seatCount, chạy lại vẫn vậy",
+    { timeout: 300_000 },
     async () => {
       await seedDatabase(ctx.db, deps); // lần 1 → lần 2 phải truncate sạch
       const summary = await seedDatabase(ctx.db, deps);
@@ -93,8 +94,15 @@ describe("seedDatabase trên PGlite", () => {
       const seatCount = Object.fromEntries(
         summary.versions.map((v) => [v.map, v.seatCount]),
       );
-      expect(seatCount).toEqual({ rosetta: 10278, sample: 1313, att: 12371 });
-      expect(summary.versions.map((v) => v.sectionCount)).toEqual([95, 3, 672]);
+      expect(seatCount).toEqual({
+        rosetta: 10278,
+        sample: 1313,
+        att: 12371,
+        trongdong: 135_000,
+      });
+      expect(summary.versions.map((v) => v.sectionCount)).toEqual([
+        95, 3, 672, 160,
+      ]);
       const expectedSeats = SEED_EVENTS.reduce(
         (n, e) => n + seatCount[e.venue],
         0,
@@ -111,9 +119,9 @@ describe("seedDatabase trên PGlite", () => {
         .select({ value: count() })
         .from(templateVersions);
       expect([eventRows, seatRows, versionRows]).toEqual([
-        11,
+        14,
         expectedSeats,
-        3,
+        4,
       ]);
       expect(uploads.at(-1)).toMatch(/^geometry\/.+\/v1\.json$/);
 
@@ -121,7 +129,7 @@ describe("seedDatabase trên PGlite", () => {
       expect(rows.every((e) => e.status === "on_sale" && e.imageUrl)).toBe(
         true,
       );
-      expect(rows.filter((e) => e.isTrending)).toHaveLength(7);
+      expect(rows.filter((e) => e.isTrending)).toHaveLength(9);
       const [bg] = await db
         .select()
         .from(templates)

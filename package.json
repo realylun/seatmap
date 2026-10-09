@@ -16,6 +16,7 @@
     "coverage": "vitest run --coverage --passWithNoTests",
     "test:e2e": "playwright test",
     "svg:from-png": "tsx scripts/png-to-svg.ts",
+    "svg:trong-dong": "tsx scripts/trong-dong-svg.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "dotenv -e .env.local -- drizzle-kit migrate",
     "db:seed": "dotenv -e .env.local -- tsx src/db/seed.ts",

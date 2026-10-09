@@ -16,6 +16,7 @@ const VENUE_FILE: Record<SeedMapKey, string> = {
   rosetta: "venue.rosetta.json",
   sample: "venue.sample.json",
   att: "att-stadium.svg",
+  trongdong: "trong-dong.svg",
 };
 
 async function uploadBackground(key: SeedMapKey, file: string) {
@@ -42,10 +43,12 @@ async function main() {
       rosetta: await readVenueFile("rosetta"),
       sample: await readVenueFile("sample"),
       att: await readVenueFile("att"),
+      trongdong: await readVenueFile("trongdong"),
     };
     const backgroundUrls = {
       rosetta: await uploadBackground("rosetta", "rosetta-arena.png"),
       att: await uploadBackground("att", "att-stadium.png"),
+      trongdong: await uploadBackground("trongdong", "trong-dong.png"),
     };
     const summary = await seedDatabase(db, {
       putJson,

@@ -1,7 +1,8 @@
-// Dữ liệu demo: 3 venue (Hà Nội dùng map Rosetta, TP.HCM dùng map mẫu, AT&T Stadium dựng từ SVG),
-// 11 event, bảng giá theo loại.
+// Dữ liệu demo: 4 venue (Hà Nội dùng map Rosetta, TP.HCM dùng map mẫu, AT&T Stadium và
+// SVĐ Trống Đồng dựng từ SVG), 14 event, bảng giá theo loại.
+// Trống Đồng đang xây, chưa có sơ đồ chính thức — map là bản giả lập (scripts/trong-dong-svg.ts).
 
-export type SeedMapKey = "rosetta" | "sample" | "att";
+export type SeedMapKey = "rosetta" | "sample" | "att" | "trongdong";
 
 export type SeedVenue = {
   readonly key: SeedMapKey;
@@ -48,6 +49,13 @@ export const SEED_VENUES: readonly SeedVenue[] = [
     city: "Arlington, TX",
     address: "1 AT&T Way, Arlington, TX 76011",
     templateName: "AT&T Stadium — SVG",
+  },
+  {
+    key: "trongdong",
+    name: "SVĐ Trống Đồng",
+    city: "Hanoi",
+    address: "Đông Anh, Hà Nội",
+    templateName: "Trống Đồng — SVG (giả lập)",
   },
 ];
 
@@ -160,6 +168,30 @@ export const SEED_EVENTS: readonly SeedEvent[] = [
     category: "shows",
     venue: "att",
     inDays: 44,
+    trending: false,
+  },
+  {
+    slug: "vietnam-vs-korea-trong-dong",
+    name: "Việt Nam vs Hàn Quốc — Vòng loại World Cup",
+    category: "sports",
+    venue: "trongdong",
+    inDays: 15,
+    trending: true,
+  },
+  {
+    slug: "dai-nhac-hoi-trong-dong",
+    name: "Đại nhạc hội Trống Đồng 2026",
+    category: "music",
+    venue: "trongdong",
+    inDays: 29,
+    trending: true,
+  },
+  {
+    slug: "le-hoi-anh-sang-thang-long",
+    name: "Lễ hội Ánh sáng Thăng Long",
+    category: "shows",
+    venue: "trongdong",
+    inDays: 51,
     trending: false,
   },
 ];

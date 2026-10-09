@@ -28,6 +28,28 @@ describe("venueFileFromSvg", () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
+  it("Trống Đồng (giả lập): 160 khu, đúng 135.000 ghế, row 1 gần sân nhất", () => {
+    const trongDongSvg = readFileSync(
+      new URL("../../../data/venues/trong-dong.svg", import.meta.url),
+      "utf8",
+    );
+    const venue = buildVenue(venueFileFromSvg(trongDongSvg).editor);
+    expect(venue.sections).toHaveLength(160);
+    const seats = venue.sections.flatMap((s) => s.rows.flatMap((r) => r.seats));
+    expect(seats.length).toBe(135_000);
+    // Tâm sân trùng gốc toạ độ map (sân nằm giữa viewBox vuông)
+    type Row = (typeof venue.sections)[number]["rows"][number];
+    const meanDistance = (row: Row) =>
+      row.seats.reduce((d, s) => d + Math.hypot(...s.geometry.coordinates), 0) /
+      row.seats.length;
+    const reversed = venue.sections.filter(
+      ({ rows }) =>
+        rows[0].feature.properties.row !== "1" ||
+        meanDistance(rows[0]) >= meanDistance(rows.at(-1)!),
+    );
+    expect(reversed.map((s) => s.id)).toEqual([]);
+  });
+
   it("SVG lỗi → throw kèm thông báo", () => {
     expect(() => venueFileFromSvg("<svg></svg>")).toThrow(/lỗi/);
   });
