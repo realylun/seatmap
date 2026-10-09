@@ -48,10 +48,16 @@ function EmptyList({
 
 /**
  * Render listing theo đợt: đợt đầu LISTING_PAGE_SIZE, cuộn tới sentinel cuối danh sách thì thêm
- * một đợt. Tổng số listing vẫn hiển thị đủ ở dòng "N listings".
+ * một đợt. Tổng số listing vẫn hiển thị đủ ở dòng "N listings". Đổi bộ lọc (`resetKey`) → về đợt đầu.
  */
-function useRenderCount(total: number) {
+function useRenderCount(total: number, resetKey: string) {
   const [count, setCount] = useState(LISTING_PAGE_SIZE);
+  const [lastKey, setLastKey] = useState(resetKey);
+  // Điều chỉnh state khi prop đổi ngay trong render (không cần effect + render thừa)
+  if (lastKey !== resetKey) {
+    setLastKey(resetKey);
+    setCount(LISTING_PAGE_SIZE);
+  }
   // callback ref vào state: effect chạy lại khi sentinel mount/unmount
   const [sentinel, setSentinel] = useState<HTMLLIElement | null>(null);
   const hasMore = count < total;
@@ -59,20 +65,29 @@ function useRenderCount(total: number) {
     if (!sentinel || !hasMore) return;
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (entry?.isIntersecting) setCount((c) => nextRenderCount(c, total));
+        if (entry?.isIntersecting) setCount(nextRenderCount(count, total));
       },
-      { root: sentinel.parentElement, rootMargin: "400px" },
+      // root = viewport: dưới breakpoint lg danh sách cao theo nội dung và trang cuộn, không phải <ul>.
+      // `count` trong deps: observer tạo lại sau mỗi đợt nên sentinel vẫn trong vùng nhìn sẽ báo tiếp
+      { rootMargin: "400px" },
     );
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [sentinel, hasMore, total]);
+  }, [sentinel, hasMore, total, count]);
   return { renderCount: count, hasMore, setSentinel };
 }
 
 export function ListingPanel(props: Props) {
   const tierById = new Map(props.tiers.map((t) => [t.id, t]));
+  const resetKey = [
+    props.quantity,
+    props.sort,
+    [...props.tierIds].toSorted().join(","),
+    props.selectedSection ?? "",
+  ].join("|");
   const { renderCount, hasMore, setSentinel } = useRenderCount(
     props.listings.length,
+    resetKey,
   );
   return (
     <section aria-label="Tickets" className="flex min-h-0 flex-col bg-white">
@@ -110,7 +125,8 @@ export function ListingPanel(props: Props) {
       {props.listings.length === 0 ? (
         <EmptyList loading={props.loading} error={props.error} />
       ) : (
-        <ul className="min-h-0 flex-1 overflow-y-auto">
+        // key: đổi bộ lọc → <ul> mới, cuộn về đầu
+        <ul key={resetKey} className="min-h-0 flex-1 overflow-y-auto">
           {props.listings.slice(0, renderCount).map((l) => {
             const tier = tierById.get(l.tierId);
             return (

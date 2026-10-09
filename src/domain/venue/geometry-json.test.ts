@@ -26,4 +26,8 @@ describe("serializeGeometry", () => {
   it("does not produce -0", () => {
     expect(serializeGeometry([-0.0000001])).toBe("[0]");
   });
+
+  it("leaves non-finite numbers to JSON (null) instead of hiding them as 0", () => {
+    expect(serializeGeometry([Number.NaN, Infinity])).toBe("[null,null]");
+  });
 });

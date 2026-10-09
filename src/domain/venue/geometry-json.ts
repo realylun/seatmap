@@ -3,8 +3,12 @@
 // dung lượng gzip với venue 100k+ ghế. Làm tròn lúc serialize để buildVenue giữ nguyên kết quả.
 const PRECISION = 1e6;
 
+// NaN/Infinity giữ nguyên (JSON.stringify → null, venueSchema từ chối) thay vì thành 0 lặng lẽ;
+// `|| 0` chỉ để bỏ -0
 const roundNumber = (_key: string, value: unknown) =>
-  typeof value === "number" && !Number.isInteger(value)
+  typeof value === "number" &&
+  Number.isFinite(value) &&
+  !Number.isInteger(value)
     ? Math.round(value * PRECISION) / PRECISION || 0
     : value;
 
