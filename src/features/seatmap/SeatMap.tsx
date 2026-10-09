@@ -10,7 +10,7 @@ import MapGL, {
 } from "react-map-gl/maplibre";
 import type { Listing } from "@/domain/seats/listings";
 import { applySelection, applyStateDiff, setSourceData } from "./apply-states";
-import type { DecodedAvailability } from "./availability";
+import { seatCounts, type DecodedAvailability } from "./availability";
 import { buildStyle, MAX_ZOOM, MIN_ZOOM, SEAT_LEVEL } from "./build-style";
 import { flyHome, flyToSection, MAX_PITCH, TILT_THRESHOLD } from "./camera";
 import {
@@ -24,6 +24,7 @@ import { parseMapVenue, type MapSection, type MapVenue } from "./map-venue";
 import { rowMarkers, sectionMarkers, sectionShape } from "./markers";
 import { configureMapLibreWorker } from "./maplibre-worker";
 import { addPillImages } from "./pills";
+import { SeatCountBadge } from "./SeatCountBadge";
 
 configureMapLibreWorker();
 
@@ -199,6 +200,11 @@ export default function SeatMap(props: SeatMapProps) {
     flyToSection(map, section, venue.focus);
   }, [map, flyRequest, sectionsById, venue]);
 
+  const counts = useMemo(
+    () => (availability ? seatCounts(availability.seats) : null),
+    [availability],
+  );
+
   const is3d = useTiltMode(map);
   useUprightLabels(map, venue);
 
@@ -288,6 +294,7 @@ export default function SeatMap(props: SeatMapProps) {
         >
           Full view
         </button>
+        {counts && <SeatCountBadge counts={counts} />}
       </div>
     </div>
   );

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildListings } from "@/domain/seats/listings";
 import { buildVenue } from "@/domain/venue/venue-file";
 import type { SectionConfig } from "@/domain/venue/types";
-import { decodeAvailability, isSelectable } from "./availability";
+import { decodeAvailability, isSelectable, seatCounts } from "./availability";
 import { buildStyle, PROMOTE, SEAT_LEVEL, SWITCH_LEVEL } from "./build-style";
 import { boundsCenter, ringBounds } from "./camera";
 import {
@@ -345,5 +345,33 @@ describe("camera helpers", () => {
       [1, 0],
       [5, 2],
     ]);
+  });
+});
+
+const seatWith = (status: "available" | "held" | "sold" | "blocked") => ({
+  sid: "1|A|1",
+  tierId: "t",
+  price: 1,
+  status,
+});
+
+describe("seatCounts", () => {
+  it("counts seats by status for the map's capacity badge", () => {
+    expect(
+      seatCounts([
+        seatWith("available"),
+        seatWith("available"),
+        seatWith("held"),
+        seatWith("sold"),
+        seatWith("blocked"),
+      ]),
+    ).toEqual({ total: 5, available: 2, held: 1, sold: 1, blocked: 1 });
+    expect(seatCounts([])).toEqual({
+      total: 0,
+      available: 0,
+      held: 0,
+      sold: 0,
+      blocked: 0,
+    });
   });
 });

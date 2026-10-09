@@ -67,3 +67,18 @@ export function decodeAvailability(json: unknown): DecodedAvailability {
 export function isSelectable(seat: SeatAvailability | undefined): boolean {
   return seat?.status === "available" && seat.tierId !== null;
 }
+
+export type SeatCounts = Readonly<Record<"total" | SeatStatus, number>>;
+
+/** Đếm ghế theo trạng thái → badge sức chứa góc phải seat map */
+export function seatCounts(seats: readonly SeatAvailability[]): SeatCounts {
+  const byStatus = Map.groupBy(seats, (s) => s.status);
+  const count = (status: SeatStatus) => byStatus.get(status)?.length ?? 0;
+  return {
+    total: seats.length,
+    available: count("available"),
+    held: count("held"),
+    sold: count("sold"),
+    blocked: count("blocked"),
+  };
+}
