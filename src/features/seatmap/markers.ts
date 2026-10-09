@@ -77,20 +77,21 @@ export function rowMarkers(
   return collection(
     cheapestBy(listings, (l) => rowKey(l.section, l.row)).flatMap((l) => {
       const row = sections.get(l.section)?.rows.find((r) => r.name === l.row);
-      return row ? [marker(l, row.center, colorOf)] : [];
+      return row ? [marker(l, row.start, colorOf)] : [];
     }),
   );
 }
 
-/** Polygon 1 section cho nguồn hovered/selected (rỗng nếu không có) */
+/** Polygon 1 section cho nguồn hovered/selected (rỗng nếu không có); `color` = tint khi chọn */
 export function sectionShape(
   section: MapSection | undefined,
+  color: string | null = null,
 ): FeatureCollection {
   if (!section) return collection([]);
   return collection([
     {
       type: "Feature",
-      properties: { section: section.id },
+      properties: { section: section.id, color },
       geometry: { type: "Polygon", coordinates: [section.ring] },
     },
   ]);

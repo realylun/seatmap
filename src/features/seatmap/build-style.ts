@@ -16,13 +16,20 @@ export const MAX_ZOOM = 9;
 
 export const COLORS = {
   background: "#eef0f6",
+  // viền sân: nền trắng + mép tím nhạt như SeatGeek
+  outline: "#ffffff",
+  outlineStroke: "#c9c8dc",
+  // sân khấu (geojson.field kind=stage) xám đậm như ảnh gốc; field khác giữ màu cỏ
+  stage: "#4d4d4d",
+  stageStroke: "#2e2e2e",
+  field: "#7cb46b",
   sectionListed: "#e0e1e7",
   sectionEmpty: "#eaeaee",
   sectionStroke: "#b4b6c1",
   rowDefault: "#cfd1da",
-  seatEmpty: "#ffffff",
+  seatEmpty: "#f4f4f7",
   seatStroke: "#c9cbd4",
-  seatTaken: "#b9bcc6",
+  seatTaken: "#c4c6cf",
   // ghế đang chọn: nền đậm + viền accent, không trùng màu tier nào
   seatSelected: "#14090a",
   seatSelectedStroke: "#ff5a3c",
@@ -30,7 +37,13 @@ export const COLORS = {
   hover: "#5b6475",
   label: "#7c7e8a",
   pillText: "#16171a",
+  seatNumber: "#ffffff",
 } as const;
+
+/** Bán kính ghế / khoảng cách 2 ghế: < 0.5 để còn khe trắng giữa các ghế */
+const SEAT_RADIUS_RATIO = 0.42;
+/** Bề rộng thế giới (px) ở zoom 0 của MapLibre (tile 512) trên 360 đơn vị kinh độ */
+const PX_PER_UNIT_Z0 = 512 / 360;
 
 const FONT_REGULAR = ["Open Sans Regular"];
 const FONT_BOLD = ["Open Sans Bold"];
@@ -79,7 +92,30 @@ const seatColor = (
   ["to-color", ["coalesce", stateColor, fallback]],
 ];
 
-function venueLayers(): LayerSpecification[] {
+/**
+ * Bán kính ghế (px) theo khoảng cách ghế thật: px/đơn vị tăng gấp đôi mỗi bậc zoom → nội suy
+ * exponential cơ số 2 cho ghế luôn đúng tỉ lệ với section ở mọi zoom.
+ */
+export function seatRadius(spacing: number): ExpressionSpecification {
+  if (spacing <= 0) return byZoom(SEAT_LEVEL - 0.4, 1, 8, 6, 9, 12);
+  const at = (zoom: number) =>
+    spacing * SEAT_RADIUS_RATIO * PX_PER_UNIT_Z0 * 2 ** zoom;
+  return [
+    "interpolate",
+    ["exponential", 2],
+    ["zoom"],
+    SEAT_LEVEL - 0.4,
+    at(SEAT_LEVEL - 0.4),
+    MAX_ZOOM,
+    at(MAX_ZOOM),
+  ];
+}
+
+const fadeInSeats = (
+  visible: number | ExpressionSpecification,
+): ExpressionSpecification => byZoom(SEAT_LEVEL - 0.4, 0, SEAT_LEVEL, visible);
+
+function sectionLayers(): LayerSpecification[] {
   return [
     {
       id: "section-fill",
@@ -103,6 +139,12 @@ function venueLayers(): LayerSpecification[] {
         "line-width": byZoom(4, 0.6, 8, 1.6),
       },
     },
+  ];
+}
+
+// Row + ghế nằm trên lớp phủ hover/chọn section để tint không làm đục màu ghế
+function seatLayers(spacing: number): LayerSpecification[] {
+  return [
     // Row có vé: vạch màu tier khi nhìn toàn sân; tới zoom ghế thì nhường cho từng ghế
     {
       id: "row-stroke",
@@ -136,32 +178,64 @@ function venueLayers(): LayerSpecification[] {
           COLORS.seatStroke,
           COLORS.seatSelectedStroke,
         ),
-        "circle-stroke-width": ["case", isSelected, 2.5, 1],
-        "circle-radius": byZoom(SEAT_LEVEL - 0.4, 1, 8, 6, 9, 12),
-        "circle-opacity": byZoom(SEAT_LEVEL - 0.4, 0, SEAT_LEVEL, 1),
-        "circle-stroke-opacity": byZoom(SEAT_LEVEL - 0.4, 0, SEAT_LEVEL, 1),
+        // ghế trống không viền (như SeatGeek); ghế có vé viền đậm màu tier
+        "circle-stroke-width": [
+          "case",
+          isSelected,
+          2.5,
+          ["all", isListed, ["!", isTaken]],
+          1.5,
+          0,
+        ],
+        "circle-radius": seatRadius(spacing),
+        // ghế nằm phẳng trên mặt sân → khi nghiêng 3D bị nén theo phối cảnh, không đè row bên cạnh
+        "circle-pitch-alignment": "map",
+        // ghế có vé: nền nhạt hơn viền một chút
+        "circle-opacity": fadeInSeats([
+          "case",
+          ["all", isListed, ["!", isSelected], ["!", isTaken]],
+          0.72,
+          1,
+        ]),
+        "circle-stroke-opacity": fadeInSeats(1),
+      },
+    },
+    // Số ghế chỉ hiện trên ghế đang chọn (feature-state không dùng được trong filter → ẩn bằng opacity)
+    {
+      id: "seat-numbers",
+      type: "symbol",
+      source: "seats",
+      minzoom: SEAT_LEVEL,
+      layout: {
+        "text-field": ["to-string", ["get", "seat"]],
+        "text-font": FONT_REGULAR,
+        "text-size": byZoom(SEAT_LEVEL, 9, MAX_ZOOM, 22),
+        "text-allow-overlap": true,
+        "text-ignore-placement": true,
+        "text-pitch-alignment": "viewport",
+      },
+      paint: {
+        "text-color": COLORS.seatNumber,
+        "text-opacity": ["case", isSelected, 1, 0],
       },
     },
   ];
 }
 
-function sectionLabelLayer(
-  id: string,
-  filter: ExpressionSpecification,
-  rotationAlignment: "viewport" | "map",
-): SymbolLayerSpecification {
+// Nhãn luôn theo màn hình: dải dài đã được tính sẵn góc dọc theo dải và giữ không lộn ngược
+// theo bearing hiện tại (labels.ts), nên xoay sân 3D chữ vẫn đọc được
+function sectionLabelLayer(): SymbolLayerSpecification {
   return {
-    id,
+    id: "section-labels",
     type: "symbol",
     source: "labels",
-    filter,
     layout: {
       "text-field": ["get", "label"],
       "text-font": FONT_REGULAR,
       "text-size": byZoom(4, 9.5, 5, 13, 7, 24, 9, 48),
       "text-padding": 0,
       "text-rotate": ["get", "rotate"],
-      "text-rotation-alignment": rotationAlignment,
+      "text-rotation-alignment": "viewport",
       "text-pitch-alignment": "map",
       // luôn hiện, nằm dưới viên giá, không đẩy viên giá đi
       "text-allow-overlap": true,
@@ -214,6 +288,7 @@ export function buildStyle(
     version: 8,
     glyphs,
     sources: {
+      outline: { type: "geojson", data: geojson.outline },
       field: { type: "geojson", data: geojson.field },
       sections: {
         type: "geojson",
@@ -231,40 +306,85 @@ export function buildStyle(
         paint: { "background-color": COLORS.background },
       },
       {
+        id: "outline-fill",
+        type: "fill",
+        source: "outline",
+        paint: { "fill-color": COLORS.outline },
+      },
+      {
+        id: "outline-stroke",
+        type: "line",
+        source: "outline",
+        layout: { "line-join": "round" },
+        paint: {
+          "line-color": COLORS.outlineStroke,
+          "line-width": byZoom(4, 2, 8, 6),
+        },
+      },
+      // Trên viền sân trắng, dưới section / ghế / nhãn / viên giá
+      {
         id: "field",
         type: "fill",
         source: "field",
-        paint: { "fill-color": "#7cb46b" },
+        paint: {
+          "fill-color": [
+            "match",
+            ["get", "kind"],
+            "stage",
+            COLORS.stage,
+            COLORS.field,
+          ],
+        },
       },
-      ...venueLayers(),
+      {
+        id: "field-stroke",
+        type: "line",
+        source: "field",
+        filter: ["==", ["get", "kind"], "stage"],
+        layout: { "line-join": "round" },
+        paint: {
+          "line-color": COLORS.stageStroke,
+          "line-width": byZoom(4, 0.8, 8, 2),
+        },
+      },
+      ...sectionLayers(),
       {
         id: "hovered-section-fill",
         type: "fill",
         source: "hovered-section",
-        paint: { "fill-color": COLORS.hover, "fill-opacity": 0.25 },
+        paint: { "fill-color": COLORS.hover, "fill-opacity": 0.18 },
+      },
+      // Section đang chọn: phủ nhạt màu tier của vé rẻ nhất (như SeatGeek), nằm dưới ghế
+      {
+        id: "selected-section-fill",
+        type: "fill",
+        source: "selected-section",
+        paint: {
+          "fill-color": [
+            "to-color",
+            ["coalesce", ["get", "color"], COLORS.selected],
+          ],
+          "fill-opacity": 0.2,
+        },
       },
       {
         id: "selected-section-stroke",
         type: "line",
         source: "selected-section",
-        paint: { "line-color": COLORS.selected, "line-width": 3 },
+        paint: {
+          "line-color": [
+            "to-color",
+            ["coalesce", ["get", "color"], COLORS.selected],
+          ],
+          "line-width": 2,
+          "line-opacity": 0.8,
+        },
       },
-      sectionLabelLayer(
-        "section-labels",
-        ["==", ["get", "rotate"], 0],
-        "viewport",
-      ),
-      sectionLabelLayer(
-        "section-labels-along",
-        ["!=", ["get", "rotate"], 0],
-        "map",
-      ),
+      ...seatLayers(venue.seatSpacing),
+      sectionLabelLayer(),
       pillLayer("section-markers", 13, { maxzoom: SWITCH_LEVEL }),
-      // tới zoom ghế thì ẩn pin row để thấy và bấm được từng ghế
-      pillLayer("row-markers", 11, {
-        minzoom: SWITCH_LEVEL,
-        maxzoom: SEAT_LEVEL,
-      }),
+      // pin row cắm ở đầu row, vẫn hiện ở zoom ghế (click ưu tiên ghế bên dưới, xem SeatMap onClick)
+      pillLayer("row-markers", 11, { minzoom: SWITCH_LEVEL }),
     ],
   };
 }

@@ -38,6 +38,42 @@ describe("snapshotSeats", () => {
     ]);
   });
 
+  it("ghế đặt tay (explicitRows) → giữ nguyên số ghế gốc", () => {
+    const empty: VenueDraft = {
+      extent: DEFAULT_EXTENT,
+      sections: [],
+      selectedId: null,
+    };
+    const draft = addSection(empty, [
+      [0, 0],
+      [3, 0],
+      [3, 2],
+      [0, 2],
+      [0, 0],
+    ]);
+    const venue = buildVenue({
+      ...draft,
+      sections: [
+        {
+          ...draft.sections[0],
+          explicitRows: [
+            {
+              name: "A",
+              seats: [
+                { number: 12, at: [2, 1] },
+                { number: 11, at: [1, 1] },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    expect(snapshotSeats(venue)).toEqual([
+      { section: "S001", row: "A", seat: "11" },
+      { section: "S001", row: "A", seat: "12" },
+    ]);
+  });
+
   it.skipIf(!hasVenueData)(
     "rosetta: 10278 ghế / 95 section, sid duy nhất",
     () => {

@@ -7,6 +7,25 @@ export const ringSchema = z.array(pointSchema).min(4);
 
 export const numberingSchema = z.enum(["ltr", "rtl"]);
 
+// Ghế đặt tay (vd. import từ SVG): giữ nguyên vị trí + số ghế, không sinh bằng generateRows
+const explicitSeatSchema = z.object({
+  number: z.number().int().positive(),
+  at: pointSchema,
+});
+
+const hasDuplicates = (values: readonly (string | number)[]) =>
+  new Set(values).size !== values.length;
+
+export const explicitRowSchema = z
+  .object({
+    name: z.string().trim().min(1),
+    seats: z.array(explicitSeatSchema).min(1),
+  })
+  .refine((row) => !hasDuplicates(row.seats.map((s) => s.number)), {
+    message: "Số ghế bị trùng trong row",
+    path: ["seats"],
+  });
+
 export const sectionConfigSchema = z.object({
   id: z.string().min(1),
   ring: ringSchema,
@@ -18,6 +37,14 @@ export const sectionConfigSchema = z.object({
   overrides: z.string(),
   seatSpacing: z.number().positive(),
   numbering: numberingSchema,
+  // thiếu = sinh row/ghế từ các tham số ở trên (file cũ)
+  explicitRows: z
+    .array(explicitRowSchema)
+    .min(1)
+    .refine((rows) => !hasDuplicates(rows.map((r) => r.name.toUpperCase())), {
+      message: "Tên row bị trùng trong section",
+    })
+    .optional(),
 });
 
 export const extentSchema = z.object({
@@ -25,9 +52,17 @@ export const extentSchema = z.object({
   h: z.number().positive(),
 });
 
+// Vật thể không bán vé (sân khấu, B-stage...) nhận diện từ vùng tối của ảnh nền
+export const venueObjectSchema = z.object({
+  kind: z.literal("stage"),
+  ring: ringSchema,
+});
+
 export const editorBlockSchema = z.object({
   extent: extentSchema,
   sections: z.array(sectionConfigSchema),
+  // optional: block editor / file cũ không có → coi như []
+  objects: z.array(venueObjectSchema).optional(),
 });
 
 const feature = <P extends z.ZodType, G extends z.ZodType>(
@@ -101,8 +136,10 @@ export const venueFileSchema = venueSchema.extend({
 export type Point = z.infer<typeof pointSchema>;
 export type Ring = readonly Point[];
 export type Numbering = z.infer<typeof numberingSchema>;
+export type ExplicitRow = z.infer<typeof explicitRowSchema>;
 export type SectionConfig = z.infer<typeof sectionConfigSchema>;
 export type Extent = z.infer<typeof extentSchema>;
+export type VenueObject = z.infer<typeof venueObjectSchema>;
 export type EditorBlock = z.infer<typeof editorBlockSchema>;
 export type SectionFeature = z.infer<typeof sectionFeatureSchema>;
 export type RowFeature = z.infer<typeof rowFeatureSchema>;

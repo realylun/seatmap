@@ -95,13 +95,50 @@ describe("buildStyle", () => {
 
   it("switches pins at SWITCH_LEVEL and draws seats from SEAT_LEVEL", () => {
     expect(layer("section-markers")).toMatchObject({ maxzoom: SWITCH_LEVEL });
-    expect(layer("row-markers")).toMatchObject({
-      minzoom: SWITCH_LEVEL,
-      maxzoom: SEAT_LEVEL,
-    });
+    expect(layer("row-markers")).toMatchObject({ minzoom: SWITCH_LEVEL });
+    expect(layer("row-markers")).not.toHaveProperty("maxzoom");
     expect(layer("seats")).toMatchObject({ minzoom: SEAT_LEVEL - 0.4 });
     const ids = style.layers.map((l) => l.id);
     expect(ids.indexOf("seats")).toBeLessThan(ids.indexOf("section-markers"));
+  });
+});
+
+describe("stage (geojson.field)", () => {
+  const stage = buildVenue({
+    extent: { w: 20, h: 10 },
+    sections: [section("101", 0)],
+    objects: [
+      {
+        kind: "stage",
+        ring: [
+          [0, 4],
+          [4, 4],
+          [4, 6],
+          [0, 6],
+          [0, 4],
+        ],
+      },
+    ],
+  });
+  const mv = parseMapVenue(JSON.parse(JSON.stringify(stage)) as unknown);
+  const style = buildStyle(mv, { glyphs: "/fonts/{fontstack}/{range}.pbf" });
+  const ids = style.layers.map((l) => l.id);
+
+  it("keeps field polygons from venue.json", () => {
+    expect(mv.geojson.field.features).toHaveLength(1);
+    expect(mv.geojson.field.features[0].properties).toEqual({ kind: "stage" });
+  });
+
+  it("draws stage dark grey above the outline, below sections / seats / pills", () => {
+    expect(style.sources.field).toMatchObject({ data: mv.geojson.field });
+    const fill = style.layers.find((l) => l.id === "field");
+    expect(JSON.stringify(fill)).toContain("#4d4d4d");
+    for (const id of ["field", "field-stroke"]) {
+      expect(ids.indexOf(id)).toBeGreaterThan(ids.indexOf("outline-stroke"));
+      expect(ids.indexOf(id)).toBeLessThan(ids.indexOf("section-fill"));
+    }
+    expect(ids.indexOf("section-fill")).toBeLessThan(ids.indexOf("seats"));
+    expect(ids.indexOf("seats")).toBeLessThan(ids.indexOf("section-labels"));
   });
 });
 

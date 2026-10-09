@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { SeatAssignPanel } from "@/features/event-admin/SeatAssignPanel";
 import {
   advanceStatusAction,
+  rebindVersionAction,
   setTrendingAction,
 } from "@/server/actions/events";
 import {
@@ -13,6 +14,7 @@ import {
   updateTierAction,
 } from "@/server/actions/tiers";
 import { getAdminEvent } from "@/server/queries/events";
+import { listVenueVersions } from "@/server/queries/templates";
 import {
   Field,
   Loading,
@@ -175,6 +177,51 @@ function SectionAssign({ data }: { data: Data }) {
   );
 }
 
+type Versions = Awaited<ReturnType<typeof listVenueVersions>>;
+
+function VersionSection({
+  data,
+  versions,
+}: {
+  data: Data;
+  versions: Versions;
+}) {
+  const { event } = data;
+  const label = (v: Versions[number]) =>
+    `${v.templateName} v${v.version} — ${v.sectionCount} sections`;
+  const current = versions.find((v) => v.id === event.templateVersionId);
+  const others = versions.filter((v) => v.id !== event.templateVersionId);
+  return (
+    <section className="mb-8 max-w-xl">
+      <h2 className="mb-2 text-lg font-medium">Template version</h2>
+      <p className="mb-3 text-sm text-zinc-600 dark:text-zinc-400">
+        Current: <b>{current ? label(current) : event.templateVersionId}</b>
+      </p>
+      {others.length > 0 && (
+        <form
+          action={rebindVersionAction.bind(null, event.id)}
+          className="grid gap-3"
+        >
+          <Field label="Switch to version">
+            <select name="templateVersionId" required className={inputCls}>
+              {others.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {label(v)}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <p className="text-xs text-amber-700 dark:text-amber-400">
+            Only allowed before any hold or order. Seats are re-created from the
+            new geometry and all tier assignments are reset.
+          </p>
+          <button className={btnGhostCls}>Change version</button>
+        </form>
+      )}
+    </section>
+  );
+}
+
 type IdParams = { params: Promise<{ id: string }> };
 
 async function EventAdmin({ params }: IdParams) {
@@ -182,6 +229,7 @@ async function EventAdmin({ params }: IdParams) {
   const data = await getAdminEvent(id);
   if (!data) notFound();
   const { event } = data;
+  const versions = await listVenueVersions(event.venueId);
   const nextLabel = NEXT_LABEL[event.status];
   return (
     <>
@@ -201,6 +249,7 @@ async function EventAdmin({ params }: IdParams) {
         /{event.slug} · {event.category} · {formatDateTime(event.startsAt)} ·
         status: <b>{event.status}</b>
       </p>
+      <VersionSection data={data} versions={versions} />
       <TierSection data={data} />
       <section className="mb-8">
         <h2 className="mb-2 text-lg font-medium">Assign on map</h2>

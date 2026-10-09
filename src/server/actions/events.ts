@@ -7,6 +7,7 @@ import {
   advanceEventStatus,
   createEvent,
   fetchGeometry,
+  rebindEventVersion,
   setTrending,
 } from "../commands/events";
 import { formObject, unwrap, assertUuid } from "./form";
@@ -34,6 +35,22 @@ export async function advanceStatusAction(eventId: string) {
 export async function setTrendingAction(eventId: string, trending: boolean) {
   assertUuid(eventId);
   await setTrending(getDb(), eventId, trending);
+  invalidateEvent(eventId);
+  redirect(`/admin/events/${eventId}`);
+}
+
+/** Re-snapshots seats from another template version (transaction → pool db). */
+export async function rebindVersionAction(eventId: string, formData: FormData) {
+  assertUuid(eventId);
+  const { templateVersionId } = formObject(formData);
+  unwrap(
+    await rebindEventVersion(
+      getPoolDb(),
+      fetchGeometry,
+      eventId,
+      templateVersionId,
+    ),
+  );
   invalidateEvent(eventId);
   redirect(`/admin/events/${eventId}`);
 }

@@ -69,6 +69,18 @@ describe("detectSections", () => {
     expect(pointInRing(first.center, first.ring)).toBe(true);
   });
 
+  it("giữ dải row mỏng nhỏ, loại khe sáng 1–2px giữa 2 đường viền", () => {
+    const GREY: Rgb = [170, 170, 170];
+    const stadium = paint(1024, 1024, [
+      { x: 100, y: 100, w: 25, h: 5, color: BLUE }, // dải row 125px (< 0.0003 × 1024²)
+      { x: 300, y: 100, w: 1, h: 180, color: GREY }, // viền
+      { x: 301, y: 100, w: 2, h: 180, color: GREEN }, // khe sáng 2px
+      { x: 303, y: 100, w: 1, h: 180, color: GREY }, // viền
+    ]);
+    const found = detectSections(stadium);
+    expect(found.map((s) => s.bbox)).toEqual([{ x: 100, y: 100, w: 25, h: 5 }]);
+  });
+
   it("minAreaRatio cao → loại hết", () => {
     expect(
       detectSections(image, { minAreaRatio: 0.05, maxAreaRatio: 1 }),

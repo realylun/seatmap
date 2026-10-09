@@ -12,7 +12,7 @@ import type { Listing } from "@/domain/seats/listings";
 import { applySelection, applyStateDiff, setSourceData } from "./apply-states";
 import type { DecodedAvailability } from "./availability";
 import { buildStyle, MAX_ZOOM, MIN_ZOOM, SEAT_LEVEL } from "./build-style";
-import { flyHome, flyToSection } from "./camera";
+import { flyHome, flyToSection, MAX_PITCH, TILT_THRESHOLD } from "./camera";
 import {
   rowStates,
   seatStates,
@@ -161,7 +161,13 @@ export default function SeatMap(props: SeatMapProps) {
     prevSelection.current = props.selection;
   }, [map, props.selection]);
 
-  const { hoveredSection, selectedSection, flyRequest } = props;
+  const {
+    hoveredSection,
+    selectedSection,
+    flyRequest,
+    availability,
+    listings,
+  } = props;
   useEffect(() => {
     if (!map) return;
     setSourceData(
@@ -171,19 +177,30 @@ export default function SeatMap(props: SeatMapProps) {
     );
   }, [map, hoveredSection, sectionsById]);
 
+  const selectedColor = useMemo(
+    () => sectionColor(selectedSection, listings, availability),
+    [selectedSection, listings, availability],
+  );
   useEffect(() => {
     if (!map) return;
     const section = sectionsById.get(selectedSection ?? "");
-    setSourceData(map, "selected-section", sectionShape(section));
-  }, [map, selectedSection, sectionsById]);
+    setSourceData(
+      map,
+      "selected-section",
+      sectionShape(section, selectedColor),
+    );
+  }, [map, selectedSection, selectedColor, sectionsById]);
 
   useEffect(() => {
     const section: MapSection | undefined = sectionsById.get(
       flyRequest?.section ?? "",
     );
-    if (!map || !section) return;
-    flyToSection(map, section);
-  }, [map, flyRequest, sectionsById]);
+    if (!map || !section || !venue) return;
+    flyToSection(map, section, venue.focus);
+  }, [map, flyRequest, sectionsById, venue]);
+
+  const is3d = useTiltMode(map);
+  useUprightLabels(map, venue);
 
   if (error) {
     return <MapMessage>{error}</MapMessage>;
@@ -195,7 +212,11 @@ export default function SeatMap(props: SeatMapProps) {
   const onLoad = () => {
     const instance = mapRef.current?.getMap() ?? null;
     if (!instance) return;
-    setSourceData(instance, "labels", labelFeatures(venue.sections));
+    setSourceData(
+      instance,
+      "labels",
+      labelFeatures(venue.sections, instance.getBearing()),
+    );
     setMap(instance);
   };
 
@@ -230,8 +251,7 @@ export default function SeatMap(props: SeatMapProps) {
         minZoom={MIN_ZOOM}
         maxZoom={MAX_ZOOM}
         maxBounds={MAX_BOUNDS}
-        maxPitch={0}
-        dragRotate={false}
+        maxPitch={MAX_PITCH}
         renderWorldCopies={false}
         attributionControl={false}
         interactiveLayerIds={INTERACTIVE_LAYERS}
@@ -244,18 +264,91 @@ export default function SeatMap(props: SeatMapProps) {
       >
         <NavigationControl position="top-right" showCompass={false} />
       </MapGL>
-      <button
-        type="button"
-        onClick={() => {
-          props.onSelectSection(null);
-          if (map) flyHome(map, venue.bounds);
-        }}
-        className="absolute top-24 right-2.5 rounded-md border border-line bg-white px-2 py-1 text-xs font-semibold shadow-sm hover:bg-gray-50"
-      >
-        Full view
-      </button>
+      <div className="absolute top-24 right-2.5 flex flex-col items-end gap-1.5">
+        <button
+          type="button"
+          aria-pressed={is3d.value}
+          title="Tilt and rotate the venue (or right-click drag / Ctrl + drag)"
+          onClick={() => {
+            const next = !is3d.value;
+            is3d.set(next);
+            if (map) flyHome(map, venue.bounds, next);
+          }}
+          className={`${VIEW_BUTTON} ${is3d.value ? "bg-ink text-white" : "bg-white hover:bg-gray-50"}`}
+        >
+          3D
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            props.onSelectSection(null);
+            if (map) flyHome(map, venue.bounds, is3d.value);
+          }}
+          className={`${VIEW_BUTTON} bg-white hover:bg-gray-50`}
+        >
+          Full view
+        </button>
+      </div>
     </div>
   );
+}
+
+const VIEW_BUTTON =
+  "rounded-md border border-line px-2 py-1 text-xs font-semibold shadow-sm";
+
+/** Màu tier của vé rẻ nhất trong section → tint khi chọn section */
+function sectionColor(
+  section: string | null,
+  listings: readonly Listing[],
+  availability: DecodedAvailability | null,
+): string | null {
+  if (!section || !availability) return null;
+  const cheapest = listings
+    .filter((l) => l.section === section)
+    .reduce<Listing | null>(
+      (best, l) => (!best || l.price < best.price ? l : best),
+      null,
+    );
+  if (!cheapest) return null;
+  return (
+    availability.tiers.find((t) => t.id === cheapest.tierId)?.color ?? null
+  );
+}
+
+/**
+ * Chế độ "toàn sân" 2D/3D. Người dùng tự kéo nghiêng (chuột phải / Ctrl + kéo) cũng đổi chế độ;
+ * camera tự nghiêng khi bay tới section thì không (không có originalEvent).
+ */
+/** Map xoay xong → tính lại góc nhãn dải dài để chữ không lộn ngược */
+function useUprightLabels(map: MapLibreMap | null, venue: MapVenue | null) {
+  useEffect(() => {
+    const onRotateEnd = () => {
+      if (!map || !venue) return;
+      setSourceData(
+        map,
+        "labels",
+        labelFeatures(venue.sections, map.getBearing()),
+      );
+    };
+    map?.on("rotateend", onRotateEnd);
+    return () => {
+      map?.off("rotateend", onRotateEnd);
+    };
+  }, [map, venue]);
+}
+
+function useTiltMode(map: MapLibreMap | null) {
+  const [value, set] = useState(false);
+  useEffect(() => {
+    const onPitchEnd = (e: { originalEvent?: unknown }) => {
+      if (map && e.originalEvent) set(map.getPitch() > TILT_THRESHOLD);
+    };
+    map?.on("pitchend", onPitchEnd);
+    return () => {
+      map?.off("pitchend", onPitchEnd);
+    };
+  }, [map]);
+  return { value, set };
 }
 
 function MapMessage({ children }: { children: React.ReactNode }) {

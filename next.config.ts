@@ -4,6 +4,11 @@ const nextConfig: NextConfig = {
   /* config options here */
   cacheComponents: true,
   partialPrefetching: true,
+  experimental: {
+    // Autosave gửi cả block editor; venue import từ SVG có ghế đặt tay nặng vài MB.
+    // Giữ dưới giới hạn body 4.5 MB của Vercel Functions.
+    serverActions: { bodySizeLimit: "4mb" },
+  },
   images: {
     remotePatterns: [
       {

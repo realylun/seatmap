@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { eventSeats, templateVersions } from "@/db/schema";
+import { eventSeats, events, holds, templateVersions } from "@/db/schema";
 import {
   DEFAULT_EXTENT,
   addSection,
@@ -19,6 +19,7 @@ import {
   blockSections,
   createTier,
   parseSectionList,
+  rebindEventVersion,
 } from "./events";
 import {
   createTemplate,
@@ -170,6 +171,111 @@ describe("events", () => {
       value: "ended",
     });
     expect((await advanceEventStatus(db, res.value.id)).ok).toBe(false);
+  });
+});
+
+const putUrl = async (p: string) => ({ url: p });
+// v2 geometry: section S001 (3x4) + S002 (2x5) = 22 seats
+const draft2 = (() => {
+  const s1 = addSection(draft, [
+    [20, 0],
+    [30, 0],
+    [30, 5],
+    [20, 5],
+    [20, 0],
+  ]);
+  return updateSection(s1, "S002", { rowCount: 2, seatsPerRow: 5 });
+})();
+const loadV1 = async () => buildVenue(draft);
+const loadV2 = async () => buildVenue(draft2);
+
+async function setupRebind(slug: string) {
+  const { db } = ctx;
+  const { templateId } = await setupTemplate();
+  const v1 = await publishVersion(db, putUrl, templateId);
+  const v2 = await publishVersion(db, putUrl, templateId);
+  if (!v1.ok || !v2.ok) throw new Error("publish");
+  const ev = await createEvent(db, loadV1, {
+    name: slug,
+    slug,
+    category: "music",
+    startsAt: "2030-01-01",
+    templateVersionId: v1.value.id,
+  });
+  if (!ev.ok) throw new Error(ev.error);
+  return { eventId: ev.value.id, v1: v1.value.id, v2: v2.value.id };
+}
+const seatsOf = (eventId: string) =>
+  ctx.db.select().from(eventSeats).where(eq(eventSeats.eventId, eventId));
+
+describe("rebindEventVersion", () => {
+  it("replaces seats and updates the version", async () => {
+    const { eventId, v2 } = await setupRebind("rebind-ok");
+    const tier = await createTier(ctx.db, eventId, {
+      name: "VIP",
+      price: 1,
+      color: "#ff0000",
+    });
+    if (!tier.ok) throw new Error(tier.error);
+    await assignTierToSections(ctx.db, eventId, ["S001"], tier.value);
+
+    const res = await rebindEventVersion(ctx.db, loadV2, eventId, v2);
+    expect(res).toEqual({ ok: true, value: { seatCount: 22 } });
+    const seats = await seatsOf(eventId);
+    expect(seats).toHaveLength(22);
+    expect(seats.every((s) => s.tierId === null)).toBe(true);
+    const [ev] = await ctx.db
+      .select({ v: events.templateVersionId })
+      .from(events)
+      .where(eq(events.id, eventId));
+    expect(ev.v).toBe(v2);
+  });
+
+  it("refuses the same version, foreign venue and bad ids", async () => {
+    const { eventId, v1 } = await setupRebind("rebind-same");
+    const same = await rebindEventVersion(ctx.db, loadV2, eventId, v1);
+    expect(same.ok).toBe(false);
+
+    const other = await setupRebind("rebind-other");
+    const foreign = await rebindEventVersion(ctx.db, loadV2, eventId, other.v2);
+    expect(foreign.ok).toBe(false);
+    expect(await seatsOf(eventId)).toHaveLength(12);
+
+    expect((await rebindEventVersion(ctx.db, loadV2, "x", v1)).ok).toBe(false);
+    expect(
+      (await rebindEventVersion(ctx.db, loadV2, crypto.randomUUID(), v1)).ok,
+    ).toBe(false);
+    expect(
+      (await rebindEventVersion(ctx.db, loadV2, eventId, crypto.randomUUID()))
+        .ok,
+    ).toBe(false);
+  });
+
+  it("refuses when a seat is sold or held", async () => {
+    for (const status of ["sold", "held"] as const) {
+      const { eventId, v2 } = await setupRebind(`rebind-${status}`);
+      const [seat] = await seatsOf(eventId);
+      await ctx.db
+        .update(eventSeats)
+        .set({ status })
+        .where(eq(eventSeats.id, seat.id));
+      const res = await rebindEventVersion(ctx.db, loadV2, eventId, v2);
+      expect(res.ok).toBe(false);
+      expect(await seatsOf(eventId)).toHaveLength(12);
+    }
+  });
+
+  it("refuses when the event has a hold (any status)", async () => {
+    const { eventId, v2 } = await setupRebind("rebind-hold");
+    await ctx.db.insert(holds).values({
+      eventId,
+      sessionId: "s",
+      expiresAt: new Date(0),
+      status: "released",
+    });
+    const res = await rebindEventVersion(ctx.db, loadV2, eventId, v2);
+    expect(res.ok).toBe(false);
+    expect(await seatsOf(eventId)).toHaveLength(12);
   });
 });
 

@@ -17,6 +17,7 @@ export type DetectOptions = {
   readonly maxAreaRatio: number;
   readonly simplifyPx: number;
   readonly minFillRatio: number;
+  readonly minThicknessPx: number;
 };
 
 export type DarkObjectOptions = {
@@ -44,10 +45,13 @@ export type DetectedShape = {
 export const DETECT_DEFAULTS: DetectOptions = {
   minLuminance: 150, // pixel tối hơn = viền/chữ, không thuộc vùng nào
   colorTolerance: 22, // chênh màu tối đa so với pixel gốc của vùng
-  minAreaRatio: 0.0003, // vùng nhỏ hơn (so với cả ảnh) = nhiễu, chữ
+  // vùng nhỏ hơn (so với cả ảnh) = nhiễu. 0.0003 cũ (~315px ở ảnh 1024²) bỏ mất các dải row mỏng
+  // (~25×5px) và block nhỏ của sơ đồ sân vận động; đường kẻ mảnh đã có minThicknessPx lo
+  minAreaRatio: 0.00005,
   maxAreaRatio: 0.04, // vùng lớn hơn = nền, khu sàn lớn
   simplifyPx: 1.6,
   minFillRatio: 0.2, // diện tích / khung bao: vùng mảnh như vòng lối đi, khung viền màu → loại
+  minThicknessPx: 2.25, // diện tích / cạnh dài khung bao: khe sáng 1–2px giữa 2 đường viền → loại
 };
 
 export const DARK_DEFAULTS: DarkObjectOptions = {
@@ -307,6 +311,11 @@ export function detectSections(
       (r) =>
         r.area / ((r.maxX - r.minX + 1) * (r.maxY - r.minY + 1)) >=
         opts.minFillRatio,
+    )
+    .filter(
+      (r) =>
+        r.area / Math.max(r.maxX - r.minX + 1, r.maxY - r.minY + 1) >=
+        opts.minThicknessPx,
     )
     .map((r) => toShape(labels, w, h, r, opts.simplifyPx))
     .filter((s) => s.ring.length >= 4);

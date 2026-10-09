@@ -2,6 +2,7 @@
 // không đặt nhãn trên polygon để mỗi section chỉ có đúng 1 nhãn.
 import type { Point } from "@/domain/venue/types";
 import type { FeatureCollection, MapSection } from "./map-venue";
+import { uprightAngle } from "./venue-shape";
 
 /** Section dài/mảnh (dải ghế sát lan can) → chữ xoay theo chiều dài */
 const ELONGATED_RATIO = 2.2;
@@ -38,14 +39,21 @@ export function labelRotation(ring: readonly Point[]): number {
   return degrees;
 }
 
+/** Góc chữ trên màn hình khi map xoay `bearing`: section gọn luôn 0, dải dài dọc theo dải */
+function screenRotation(ring: readonly Point[], bearing: number): number {
+  const rotate = labelRotation(ring);
+  return rotate === 0 ? 0 : uprightAngle(rotate, bearing);
+}
+
 export function labelFeatures(
   sections: readonly MapSection[],
+  bearing = 0,
 ): FeatureCollection {
   return {
     type: "FeatureCollection",
     features: sections.map((s) => ({
       type: "Feature",
-      properties: { label: s.id, rotate: labelRotation(s.ring) },
+      properties: { label: s.id, rotate: screenRotation(s.ring, bearing) },
       geometry: { type: "Point", coordinates: s.center },
     })),
   };

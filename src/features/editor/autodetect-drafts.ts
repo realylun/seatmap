@@ -1,12 +1,9 @@
 // Phần thuần của auto-detect: vùng pixel (+ tên OCR) → section nháp cho addSections.
 import type { DetectedShape } from "@/domain/venue/detect";
-import { facingEdge, sectionDepth } from "@/domain/venue/geometry";
-import type { Extent, Point } from "@/domain/venue/types";
+import { ringToDraft } from "@/domain/venue/drafts";
+import { pixelProjector } from "@/domain/venue/projection";
+import type { Extent, Point, VenueObject } from "@/domain/venue/types";
 import type { SectionDraft } from "@/domain/venue/venue-file";
-import { pixelProjector } from "./projection";
-
-const ROW_DEPTH = 0.35; // độ sâu 1 row (đơn vị toạ độ map) để ước lượng số row
-const MAX_ROWS = 40;
 
 type ImageSize = { readonly width: number; readonly height: number };
 
@@ -16,13 +13,8 @@ function toDraft(
   project: (p: Point) => Point,
   venueCenter: Point,
 ): SectionDraft {
-  const ring = region.ring.map(project);
-  const frontEdge = facingEdge(ring, venueCenter);
-  const rowCount = Math.min(
-    MAX_ROWS,
-    Math.max(1, Math.round(sectionDepth(ring, frontEdge) / ROW_DEPTH)),
-  );
-  return { ...(name ? { id: name } : {}), ring, frontEdge, rowCount };
+  const draft = ringToDraft(region.ring.map(project), venueCenter);
+  return { ...(name ? { id: name } : {}), ...draft };
 }
 
 /** Row A quay về tâm của tất cả vùng (≈ sân khấu / sân) */
@@ -41,4 +33,14 @@ export function regionsToDrafts(
   return regions.map((r, i) =>
     toDraft(r, names[i] ?? null, project, venueCenter),
   );
+}
+
+/** Vùng tối (sân khấu, B-stage) → polygon toạ độ map, cùng phép chiếu với section */
+export function shapesToObjects(
+  shapes: readonly DetectedShape[],
+  extent: Extent,
+  size: ImageSize,
+): VenueObject[] {
+  const project = pixelProjector(extent, size.width, size.height);
+  return shapes.map((s) => ({ kind: "stage", ring: s.ring.map(project) }));
 }

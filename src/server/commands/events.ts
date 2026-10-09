@@ -3,6 +3,8 @@ import { z } from "zod";
 import {
   eventSeats,
   events,
+  holds,
+  orders,
   priceTiers,
   templateVersions,
   templates,
@@ -92,6 +94,94 @@ export async function createEvent(
       .returning({ id: events.id, slug: events.slug });
     const seatCount = await snapshotEventSeats(tx, event.id, seats);
     return { ok: true as const, value: { ...event, seatCount } };
+  });
+}
+
+const rebindSchema = z.object({
+  eventId: z.uuid(),
+  templateVersionId: z.uuid(),
+});
+
+/** Any hold (any status), order, or held/sold seat means sales have started. */
+async function hasSalesActivity(db: Db, eventId: string): Promise<boolean> {
+  const [hold, order, seat] = await Promise.all([
+    db
+      .select({ id: holds.id })
+      .from(holds)
+      .where(eq(holds.eventId, eventId))
+      .limit(1),
+    db
+      .select({ id: orders.id })
+      .from(orders)
+      .where(eq(orders.eventId, eventId))
+      .limit(1),
+    db
+      .select({ id: eventSeats.id })
+      .from(eventSeats)
+      .where(
+        and(
+          eq(eventSeats.eventId, eventId),
+          inArray(eventSeats.status, ["held", "sold"]),
+        ),
+      )
+      .limit(1),
+  ]);
+  return Boolean(hold[0] ?? order[0] ?? seat[0]);
+}
+
+/**
+ * Moves an event onto another version of a template of the same venue and re-snapshots its seats.
+ * Only before sales; tier assignments are reset (section ids differ between versions).
+ */
+export async function rebindEventVersion(
+  db: Db,
+  loadGeometry: LoadGeometry,
+  eventId: unknown,
+  templateVersionId: unknown,
+): Promise<CommandResult<{ seatCount: number }>> {
+  const parsed = rebindSchema.safeParse({ eventId, templateVersionId });
+  if (!parsed.success) return invalid(parsed.error);
+  const ids = parsed.data;
+  const [event] = await db
+    .select({ venueId: events.venueId, versionId: events.templateVersionId })
+    .from(events)
+    .where(eq(events.id, ids.eventId));
+  if (!event) return { ok: false, error: "Event not found" };
+  if (event.versionId === ids.templateVersionId)
+    return { ok: false, error: "Event already uses this version" };
+  const [version] = await db
+    .select({ geometryUrl: templateVersions.geometryUrl })
+    .from(templateVersions)
+    .innerJoin(templates, eq(templates.id, templateVersions.templateId))
+    .where(
+      and(
+        eq(templateVersions.id, ids.templateVersionId),
+        eq(templates.venueId, event.venueId),
+      ),
+    );
+  if (!version)
+    return { ok: false, error: "Template version not found for this venue" };
+
+  const seats = snapshotSeats(await loadGeometry(version.geometryUrl));
+  return db.transaction(async (tx) => {
+    // Khoá event: hold mới (FK key-share) phải chờ tới khi rebind xong.
+    await tx
+      .select({ id: events.id })
+      .from(events)
+      .where(eq(events.id, ids.eventId))
+      .for("update");
+    if (await hasSalesActivity(tx, ids.eventId))
+      return {
+        ok: false as const,
+        error: "Cannot change version: event has holds, orders or sold seats",
+      };
+    await tx.delete(eventSeats).where(eq(eventSeats.eventId, ids.eventId));
+    await tx
+      .update(events)
+      .set({ templateVersionId: ids.templateVersionId })
+      .where(eq(events.id, ids.eventId));
+    const seatCount = await snapshotEventSeats(tx, ids.eventId, seats);
+    return { ok: true as const, value: { seatCount } };
   });
 }
 

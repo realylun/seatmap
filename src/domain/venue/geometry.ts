@@ -14,6 +14,7 @@ const dot = (a: Point, b: Point) => a[0] * b[0] + a[1] * b[1];
 const cross = (a: Point, b: Point) => a[0] * b[1] - a[1] * b[0];
 const length = (a: Point) => Math.hypot(a[0], a[1]);
 const normalize = (a: Point) => scale(a, 1 / (length(a) || 1));
+export const samePoint = (a: Point, b: Point) => a[0] === b[0] && a[1] === b[1];
 
 export type GeneratedRow = {
   readonly name: string;
@@ -105,6 +106,21 @@ function frontFrame(ring: Ring, frontEdge: number): Frame {
   const n = pointsInward ? candidate : scale(candidate, -1);
   const depth = Math.max(...ring.map((v) => dot(sub(v, p), n)));
   return { p, u, n, depth };
+}
+
+// Ray casting (even-odd). Ring đóng hay chưa đóng đều được
+export function pointInRing([x, y]: Point, ring: Ring): boolean {
+  const pts =
+    ring.length > 1 && samePoint(ring[0], ring[ring.length - 1])
+      ? ring.slice(0, -1)
+      : ring;
+  return pts.reduce((inside, a, i) => {
+    const b = pts[(i + 1) % pts.length];
+    const crosses =
+      a[1] > y !== b[1] > y &&
+      x < ((b[0] - a[0]) * (y - a[1])) / (b[1] - a[1]) + a[0];
+    return crosses ? !inside : inside;
+  }, false);
 }
 
 export function sectionDepth(ring: Ring, frontEdge: number): number {

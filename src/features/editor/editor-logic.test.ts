@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { DetectedShape } from "@/domain/venue/detect";
 import type { SectionConfig } from "@/domain/venue/types";
 import { exportFile } from "@/domain/venue/venue-file";
-import { regionsToDrafts } from "./autodetect-drafts";
+import { regionsToDrafts, shapesToObjects } from "./autodetect-drafts";
 import { backgroundPathname } from "./background";
 import {
   addVertex,
@@ -14,6 +14,7 @@ import {
   moveCursor,
 } from "./draw-tool";
 import {
+  blockFromSvg,
   editorReducer,
   initEditorState,
   initialEditorState,
@@ -21,8 +22,14 @@ import {
   toEditorBlock,
 } from "./editor-reducer";
 import { cleanName } from "./ocr";
-import { extentForImage, imageCorners, pixelProjector } from "./projection";
+import {
+  extentForImage,
+  imageCorners,
+  pixelProjector,
+} from "@/domain/venue/projection";
 import { FIELDS, formatField, parseField } from "./section-form";
+import { draftBytes, MAX_DRAFT_BYTES, tooLargeMessage } from "./use-autosave";
+import { editorBlockSchema } from "@/domain/venue/types";
 
 const ring: SectionConfig["ring"] = [
   [0, 0],
@@ -84,6 +91,25 @@ describe("editorReducer", () => {
       null,
       0,
     ]);
+  });
+
+  it("set-objects thay sân khấu; load/init block cũ → objects rỗng; reset xoá", () => {
+    const objects = [{ kind: "stage" as const, ring }];
+    const s1 = editorReducer(withSection, { type: "set-objects", objects });
+    expect(s1.objects).toEqual(objects);
+    expect(withSection.objects).toEqual([]);
+    expect(toEditorBlock(s1).objects).toEqual(objects);
+    expect(toEditorBlock(withSection)).not.toHaveProperty("objects");
+    expect(initEditorState(toEditorBlock(s1), null).objects).toEqual(objects);
+    expect(initEditorState(toEditorBlock(withSection), null).objects).toEqual(
+      [],
+    );
+    const loaded = editorReducer(s1, {
+      type: "load",
+      block: { extent: { w: 5, h: 5 }, sections: [] },
+    });
+    expect(loaded.objects).toEqual([]);
+    expect(editorReducer(s1, { type: "reset" }).objects).toEqual([]);
   });
 
   it("set-image giữ extent nếu không truyền", () => {
@@ -160,6 +186,17 @@ describe("regionsToDrafts", () => {
       drafts.every((d) => (d.rowCount ?? 0) >= 1 && (d.rowCount ?? 0) <= 40),
     ).toBe(true);
     expect(drafts.every((d) => Number.isInteger(d.frontEdge))).toBe(true);
+  });
+});
+
+describe("shapesToObjects", () => {
+  it("vùng tối (pixel) → sân khấu toạ độ map, cùng phép chiếu với section", () => {
+    const size = { width: 200, height: 200 };
+    const extent = { w: 20, h: 20 };
+    const objects = shapesToObjects([region(90, 90)], extent, size);
+    const [draft] = regionsToDrafts([region(90, 90)], [null], extent, size);
+    expect(objects).toEqual([{ kind: "stage", ring: draft.ring }]);
+    expect(objects[0].ring[0][0]).toBeCloseTo(-2, 6);
   });
 });
 
@@ -265,5 +302,51 @@ describe("backgroundPathname", () => {
     const long = backgroundPathname(id, `${"x".repeat(300)}.png`);
     expect(long).toMatch(ROUTE_RULE);
     expect(long.endsWith(".png")).toBe(true);
+  });
+});
+
+describe("blockFromSvg", () => {
+  const seats = [{ number: 1, at: [1, 1] as [number, number] }];
+  const svg = {
+    extent: { w: 30, h: 20 },
+    drafts: [
+      { id: "311", ring, explicitRows: [{ name: "A", seats }] },
+      { id: "311", ring },
+    ],
+    objects: [{ kind: "stage" as const, ring }],
+  };
+
+  it("block hợp lệ theo schema, id khu duy nhất, giữ ghế đặt tay", () => {
+    const block = editorBlockSchema.parse(blockFromSvg(svg));
+    expect(block.extent).toEqual({ w: 30, h: 20 });
+    expect(block.sections.map((s) => s.id)).toEqual(["311", "S002"]);
+    expect(block.sections[0].explicitRows?.[0].seats).toEqual(seats);
+    expect(block.sections[1].explicitRows).toBeUndefined();
+    expect(block.objects).toHaveLength(1);
+  });
+
+  it("load vào reducer thay toàn bộ section cũ", () => {
+    const before = editorReducer(initialEditorState, {
+      type: "add-section",
+      ring,
+    });
+    const after = editorReducer(before, {
+      type: "load",
+      block: blockFromSvg(svg),
+    });
+    expect(after.sections.map((s) => s.id)).toEqual(["311", "S002"]);
+    expect(after.revision).toBeGreaterThan(before.revision);
+  });
+});
+
+describe("giới hạn tự lưu", () => {
+  it("draftBytes đếm byte UTF-8 của JSON", () => {
+    const block = { extent: { w: 1, h: 1 }, sections: [] };
+    expect(draftBytes(block)).toBe(JSON.stringify(block).length);
+    expect(MAX_DRAFT_BYTES).toBeLessThan(4 * 1024 * 1024);
+  });
+
+  it("thông báo nêu dung lượng MB", () => {
+    expect(tooLargeMessage(5 * 1024 * 1024)).toContain("5.0 MB");
   });
 });

@@ -22,6 +22,7 @@ import type { DrawTool } from "./use-draw-tool";
 import { draftGeoJson } from "./draw-tool";
 import {
   EDITOR_STYLE,
+  FIELD_FILL,
   IMAGE_ID,
   SECTION_FILL,
   SECTION_SELECTED,
@@ -68,7 +69,7 @@ function frontEdgeData(selected: SectionConfig | undefined) {
   return { type: "FeatureCollection", features };
 }
 
-// Ảnh nền: thêm / thay / gỡ image source + raster layer (luôn nằm dưới section-fill).
+// Ảnh nền: thêm / thay / gỡ image source + raster layer (luôn nằm dưới sân khấu + section).
 // Chỉ nạp lại ảnh khi đổi URL — đổi extent / độ mờ chỉ cập nhật toạ độ / paint.
 function syncImage(
   map: MapLibreMap,
@@ -85,7 +86,7 @@ function syncImage(
   const spec = imageSource(image, extent);
   if (!source) {
     map.addSource(IMAGE_ID, spec);
-    map.addLayer(imageLayer(), SECTION_FILL);
+    map.addLayer(imageLayer(), FIELD_FILL);
   } else if (source.url === image) {
     source.setCoordinates(spec.coordinates);
   } else {
@@ -108,6 +109,7 @@ export function EditorMap({
 
   useEffect(() => {
     if (!map) return;
+    setData(map, "field", venue.geojson.field);
     setData(map, "sections", venue.geojson.sections);
     setData(map, "rows", venue.geojson.rows);
     setData(map, "seats", venue.geojson.seats);

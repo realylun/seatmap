@@ -55,3 +55,19 @@ export async function listPublishedVersions() {
       desc(templateVersions.version),
     );
 }
+
+/** All versions of the venue's templates, newest first, for rebinding an event. */
+export async function listVenueVersions(venueId: string) {
+  await connection();
+  return getDb()
+    .select({
+      id: templateVersions.id,
+      version: templateVersions.version,
+      sectionCount: templateVersions.sectionCount,
+      templateName: templates.name,
+    })
+    .from(templateVersions)
+    .innerJoin(templates, eq(templates.id, templateVersions.templateId))
+    .where(eq(templates.venueId, venueId))
+    .orderBy(desc(templateVersions.createdAt), desc(templateVersions.version));
+}

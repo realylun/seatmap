@@ -5,12 +5,19 @@ import {
   loadVenueJson,
   VENUE_FILES,
 } from "../__fixtures__/study";
-import { venueFileSchema, type SectionConfig } from "./types";
+import {
+  editorBlockSchema,
+  sectionConfigSchema,
+  venueFileSchema,
+  type SectionConfig,
+  type VenueObject,
+} from "./types";
 import {
   addSection,
   addSections,
   buildVenue,
   DEFAULT_EXTENT,
+  DEFAULT_SECTION,
   exportFile,
   importFile,
   removeSection,
@@ -126,6 +133,35 @@ describe("buildVenue / exportFile / importFile", () => {
     expect(restored.selectedId).toBeNull();
   });
 
+  it("block editor cũ (không có objects) vẫn hợp lệ", () => {
+    const parsed = editorBlockSchema.safeParse({
+      extent: DEFAULT_EXTENT,
+      sections: draft.sections,
+    });
+    expect(parsed.success).toBe(true);
+    expect(exportFile(draft).editor).not.toHaveProperty("objects");
+    expect(buildVenue(draft).geojson.field.features).toEqual([]);
+  });
+
+  it("sân khấu (objects) → geojson.field polygon kind=stage, ring khép kín", () => {
+    const open = ring.slice(0, 4);
+    const objects: VenueObject[] = [{ kind: "stage", ring: [...open, [1, 1]] }];
+    const venue = buildVenue({ ...draft, objects });
+    expect(venue.geojson.field.features).toEqual([
+      {
+        type: "Feature",
+        properties: { kind: "stage" },
+        geometry: { type: "Polygon", coordinates: [[...open, [1, 1], [0, 0]]] },
+      },
+    ]);
+    const file = JSON.parse(
+      JSON.stringify(exportFile({ ...draft, objects })),
+    ) as unknown;
+    expect(venueFileSchema.safeParse(file).success).toBe(true);
+    expect(importFile(empty, file).objects).toEqual(objects);
+    expect(importFile(empty, exportFile(draft)).objects).toEqual([]);
+  });
+
   it("importFile báo lỗi khi thiếu/sai block editor", () => {
     expect(() => importFile(empty, { version: 1 })).toThrow(/editor/);
     expect(() => importFile(empty, null)).toThrow(/editor/);
@@ -142,6 +178,126 @@ type StoreJs = {
   exportFile: typeof exportFile;
   addSections: typeof addSections;
 };
+
+const withRows = (section: SectionConfig, explicitRows: unknown) =>
+  sectionConfigSchema.safeParse({ ...section, explicitRows }).success;
+
+describe("explicitRows (ghế đặt tay, vd. từ SVG)", () => {
+  const explicit: SectionConfig = {
+    ...DEFAULT_SECTION,
+    rowSkip: [],
+    id: "311",
+    ring,
+    explicitRows: [
+      {
+        name: "B",
+        seats: [
+          { number: 2, at: [2, 2] },
+          { number: 1, at: [1, 2] },
+        ],
+      },
+      { name: "AA", seats: [{ number: 7, at: [1, 2.5] }] },
+      {
+        name: "A",
+        seats: [
+          { number: 1, at: [1, 1] },
+          { number: 3, at: [3, 1] },
+          { number: 2, at: [2, 1] },
+        ],
+      },
+    ],
+  };
+
+  const built = () =>
+    buildVenue({ extent: DEFAULT_EXTENT, sections: [explicit] });
+
+  it("dùng đúng ghế đặt tay, bỏ qua tham số sinh row", () => {
+    const [section] = built().sections;
+    expect(section.rows.map((r) => r.feature.properties.row)).toEqual([
+      "A",
+      "B",
+      "AA",
+    ]);
+    expect(section.rows.map((r) => r.seats.length)).toEqual([3, 2, 1]);
+  });
+
+  it("giữ số ghế gốc, sắp theo số; LineString = ghế đầu → ghế cuối", () => {
+    const rowA = built().sections[0].rows[0];
+    expect(rowA.seats.map((s) => s.properties.seat)).toEqual([1, 2, 3]);
+    expect(rowA.seats.map((s) => s.geometry.coordinates)).toEqual([
+      [1, 1],
+      [2, 1],
+      [3, 1],
+    ]);
+    expect(rowA.feature.properties).toEqual({
+      section: "311",
+      row: "A",
+      seats: 3,
+    });
+    expect(rowA.feature.geometry.coordinates).toEqual([
+      [1, 1],
+      [3, 1],
+    ]);
+  });
+
+  it("row 1 ghế vẫn có LineString 2 điểm; số ghế không cần bắt đầu từ 1", () => {
+    const rowAA = built().sections[0].rows[2];
+    expect(rowAA.seats[0].properties.seat).toBe(7);
+    expect(rowAA.feature.geometry.coordinates).toEqual([
+      [1, 2.5],
+      [1, 2.5],
+    ]);
+  });
+
+  it("toạ độ build ra không dùng chung mảng với config", () => {
+    const seat = built().sections[0].rows[0].seats[0];
+    expect(seat.geometry.coordinates).not.toBe(
+      explicit.explicitRows?.[2].seats[0].at,
+    );
+  });
+
+  it("geojson gộp và file export hợp lệ theo schema", () => {
+    const venue = built();
+    expect(venue.geojson.seats.features).toHaveLength(6);
+    expect(venue.geojson.rows.features).toHaveLength(3);
+    const file = exportFile({ extent: DEFAULT_EXTENT, sections: [explicit] });
+    expect(() => venueFileSchema.parse(file)).not.toThrow();
+    expect(file.editor.sections[0].explicitRows).toHaveLength(3);
+  });
+
+  it("schema: thiếu explicitRows vẫn hợp lệ (file cũ)", () => {
+    const { explicitRows: _, ...legacy } = explicit;
+    expect(sectionConfigSchema.safeParse(legacy).success).toBe(true);
+  });
+
+  it("schema: từ chối row rỗng, trùng tên row, trùng số ghế", () => {
+    expect(withRows(explicit, [{ name: "A", seats: [] }])).toBe(false);
+    expect(withRows(explicit, [])).toBe(false);
+    expect(
+      withRows(explicit, [
+        { name: "A", seats: [{ number: 1, at: [0, 0] }] },
+        { name: "a ", seats: [{ number: 2, at: [1, 0] }] },
+      ]),
+    ).toBe(false);
+    expect(
+      withRows(explicit, [
+        { name: "A", seats: [{ number: 1, at: [0, 0] }] },
+        { name: "A", seats: [{ number: 2, at: [1, 0] }] },
+      ]),
+    ).toBe(false);
+    expect(
+      withRows(explicit, [
+        {
+          name: "A",
+          seats: [
+            { number: 1, at: [0, 0] },
+            { number: 1, at: [1, 0] },
+          ],
+        },
+      ]),
+    ).toBe(false);
+  });
+});
 
 describe.skipIf(!hasStudy)("parity với store.js gốc (AC4)", () => {
   let js: StoreJs;

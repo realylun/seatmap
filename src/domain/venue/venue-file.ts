@@ -1,8 +1,15 @@
 // Phần thuần của seatmap-editor/store.js: thao tác danh sách section (immutable) + build venue
 // + xuất/nhập file venue.json. Không có localStorage — lưu trữ do tầng trên lo.
-import { centroid, generateRows, type GeneratedRow } from "./geometry";
+import {
+  centroid,
+  generateRows,
+  samePoint,
+  type GeneratedRow,
+} from "./geometry";
 import {
   editorBlockSchema,
+  type EditorBlock,
+  type ExplicitRow,
   type Extent,
   type Point,
   type Ring,
@@ -12,6 +19,7 @@ import {
   type SectionFeature,
   type Venue,
   type VenueFile,
+  type VenueObject,
   type VenueSection,
 } from "./types";
 
@@ -33,6 +41,8 @@ export type VenueDraft = {
   readonly extent: Extent;
   readonly sections: readonly SectionConfig[];
   readonly selectedId: string | null;
+  /** Sân khấu... — thiếu = không có */
+  readonly objects?: readonly VenueObject[];
 };
 
 export type SectionDraft = Partial<SectionConfig> & {
@@ -110,29 +120,73 @@ const sectionFeature = (id: string, ring: Ring): SectionFeature => ({
   geometry: { type: "Polygon", coordinates: [[...ring]] },
 });
 
+const closedRing = (ring: Ring): Point[] => {
+  const closed = samePoint(ring[0], ring[ring.length - 1]);
+  return closed ? [...ring] : [...ring, ring[0]];
+};
+
+const objectFeature = (o: VenueObject) => ({
+  type: "Feature" as const,
+  properties: { kind: o.kind },
+  geometry: { type: "Polygon", coordinates: [closedRing(o.ring)] },
+});
+
 const collection = <F>(features: F[]) => ({
   type: "FeatureCollection" as const,
   features,
 });
 
-function buildSection(s: SectionConfig): VenueSection {
-  const rows = generateRows(s)
+type BuiltRow = {
+  readonly name: string;
+  readonly line: [Point, Point];
+  readonly seats: readonly { readonly number: number; readonly at: Point }[];
+};
+
+function generatedRows(s: SectionConfig): BuiltRow[] {
+  return generateRows(s)
     .filter(
       (r): r is GeneratedRow & { line: [Point, Point] } =>
         r.line !== null && r.seats.length > 0,
     )
     .map((r) => ({
-      feature: {
-        type: "Feature",
-        properties: { section: s.id, row: r.name, seats: r.seats.length },
-        geometry: { type: "LineString", coordinates: r.line },
-      } satisfies RowFeature,
-      seats: r.seats.map((c, k): SeatFeature => ({
-        type: "Feature",
-        properties: { section: s.id, row: r.name, seat: k + 1 },
-        geometry: { type: "Point", coordinates: c },
-      })),
+      name: r.name,
+      line: r.line,
+      seats: r.seats.map((at, k) => ({ number: k + 1, at })),
     }));
+}
+
+// A, B, ..., Z, AA, BB... và 1, 2, ..., 10: tên ngắn trước, cùng độ dài thì so tự nhiên
+const byRowName = (a: ExplicitRow, b: ExplicitRow) =>
+  a.name.length - b.name.length ||
+  a.name.localeCompare(b.name, "en", { numeric: true });
+
+function explicitRows(rows: readonly ExplicitRow[]): BuiltRow[] {
+  return rows.toSorted(byRowName).map((r) => {
+    // copy toạ độ: Venue build ra không dùng chung mảng với state editor
+    const seats = r.seats
+      .toSorted((a, b) => a.number - b.number)
+      .map((seat) => ({ number: seat.number, at: [...seat.at] as Point }));
+    const [first, last] = [seats[0].at, seats[seats.length - 1].at];
+    return { name: r.name, line: [[...first], [...last]], seats };
+  });
+}
+
+function buildSection(s: SectionConfig): VenueSection {
+  const built = s.explicitRows
+    ? explicitRows(s.explicitRows)
+    : generatedRows(s);
+  const rows = built.map((r) => ({
+    feature: {
+      type: "Feature",
+      properties: { section: s.id, row: r.name, seats: r.seats.length },
+      geometry: { type: "LineString", coordinates: r.line },
+    } satisfies RowFeature,
+    seats: r.seats.map((seat): SeatFeature => ({
+      type: "Feature",
+      properties: { section: s.id, row: r.name, seat: seat.number },
+      geometry: { type: "Point", coordinates: seat.at },
+    })),
+  }));
   return {
     id: s.id,
     center: centroid(s.ring),
@@ -143,7 +197,7 @@ function buildSection(s: SectionConfig): VenueSection {
 
 // Dữ liệu hiển thị (dùng cho cả preview trong editor lẫn file export)
 export function buildVenue(
-  state: Pick<VenueDraft, "extent" | "sections">,
+  state: Pick<VenueDraft, "extent" | "sections" | "objects">,
 ): Venue {
   const sections = state.sections.map(buildSection);
   const { w, h } = state.extent;
@@ -155,7 +209,7 @@ export function buildVenue(
     ],
     sections,
     geojson: {
-      field: collection([]),
+      field: collection((state.objects ?? []).map(objectFeature)),
       sections: collection(sections.map((s) => s.feature)),
       rows: collection(sections.flatMap((s) => s.rows.map((r) => r.feature))),
       seats: collection(
@@ -165,14 +219,23 @@ export function buildVenue(
   };
 }
 
+// Block editor (autosave + file export). Không có objects thì bỏ hẳn key → giống hệt file cũ
+export function toEditorBlock(
+  state: Pick<VenueDraft, "extent" | "sections" | "objects">,
+): EditorBlock {
+  const objects = state.objects ?? [];
+  return {
+    extent: state.extent,
+    sections: [...state.sections],
+    ...(objects.length > 0 ? { objects: [...objects] } : {}),
+  };
+}
+
 // File export = dữ liệu cho demo + cấu hình gốc để nhập lại vào editor
 export function exportFile(
-  state: Pick<VenueDraft, "extent" | "sections">,
+  state: Pick<VenueDraft, "extent" | "sections" | "objects">,
 ): VenueFile {
-  return {
-    ...buildVenue(state),
-    editor: { extent: state.extent, sections: [...state.sections] },
-  };
+  return { ...buildVenue(state), editor: toEditorBlock(state) };
 }
 
 export function importFile<S extends VenueDraft>(state: S, json: unknown): S {
@@ -193,6 +256,7 @@ export function importFile<S extends VenueDraft>(state: S, json: unknown): S {
     ...state,
     extent: parsed.data.extent,
     sections: parsed.data.sections,
+    objects: parsed.data.objects ?? [],
     selectedId: null,
   };
 }

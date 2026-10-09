@@ -12,6 +12,7 @@ import {
   generateRows,
   nearestEdge,
   parseOverrides,
+  pointInRing,
   rowNames,
   sectionDepth,
 } from "./geometry";
@@ -111,6 +112,31 @@ describe("hình học cạnh", () => {
 });
 
 type GeometryJs = typeof import("./geometry");
+
+describe("pointInRing", () => {
+  // Khu bậc thang (chữ L): phần khuyết góc trên-phải nằm ngoài
+  const stepped: SectionConfig["ring"] = [
+    [0, 0],
+    [4, 0],
+    [4, 2],
+    [2, 2],
+    [2, 4],
+    [0, 4],
+    [0, 0],
+  ];
+
+  it("điểm trong / ngoài polygon lõm", () => {
+    expect(pointInRing([1, 1], stepped)).toBe(true);
+    expect(pointInRing([1, 3], stepped)).toBe(true);
+    expect(pointInRing([3, 1], stepped)).toBe(true);
+    expect(pointInRing([3, 3], stepped)).toBe(false);
+    expect(pointInRing([-1, 1], stepped)).toBe(false);
+  });
+
+  it("chấp nhận ring chưa đóng", () => {
+    expect(pointInRing([1, 1], stepped.slice(0, -1))).toBe(true);
+  });
+});
 
 describe.skipIf(!hasStudy)("parity với geometry.js gốc (AC4)", () => {
   let js: GeometryJs;

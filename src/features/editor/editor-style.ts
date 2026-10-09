@@ -8,7 +8,7 @@ import type {
   StyleSpecification,
 } from "maplibre-gl";
 import type { Extent } from "@/domain/venue/types";
-import { imageCorners } from "./projection";
+import { imageCorners } from "@/domain/venue/projection";
 
 export const COLORS = {
   background: "#eceae5",
@@ -16,9 +16,13 @@ export const COLORS = {
   selected: "#1f6feb",
   ink: "#1d3f7a",
   accent: "#e5383b",
+  // sân khấu: cùng màu với seat map công khai (build-style.ts)
+  stage: "#4d4d4d",
+  stageStroke: "#2e2e2e",
 } as const;
 
 export const GEOJSON_SOURCES = [
+  "field",
   "sections",
   "rows",
   "seats",
@@ -27,6 +31,7 @@ export const GEOJSON_SOURCES = [
 ] as const;
 export type EditorSourceId = (typeof GEOJSON_SOURCES)[number];
 
+export const FIELD_FILL = "field-fill";
 export const SECTION_FILL = "section-fill";
 export const SECTION_SELECTED = "section-selected";
 export const IMAGE_ID = "image";
@@ -47,6 +52,19 @@ export const EDITOR_STYLE: StyleSpecification = {
       id: "background",
       type: "background",
       paint: { "background-color": COLORS.background },
+    },
+    // Sân khấu sẽ được export (geojson.field) — nằm trên ảnh nền, dưới section
+    {
+      id: FIELD_FILL,
+      type: "fill",
+      source: "field",
+      paint: { "fill-color": COLORS.stage, "fill-opacity": 0.85 },
+    },
+    {
+      id: "field-stroke",
+      type: "line",
+      source: "field",
+      paint: { "line-color": COLORS.stageStroke, "line-width": 1.5 },
     },
     {
       id: SECTION_FILL,

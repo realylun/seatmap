@@ -22,6 +22,7 @@ type Props = {
   readonly onUseOcr: (value: boolean) => void;
   readonly onExport: () => void;
   readonly onImport: (file: File) => void;
+  readonly onImportSvg: (file: File) => void;
   readonly onReset: () => void;
 };
 
@@ -103,6 +104,11 @@ export function EditorToolbar(props: Props) {
         label="Nhập venue.json"
         accept="application/json,.json"
         onFile={props.onImport}
+      />
+      <FileButton
+        label="Nhập SVG"
+        accept="image/svg+xml,.svg"
+        onFile={props.onImportSvg}
       />
       <button type="button" className={btnCls} onClick={props.onReset}>
         Xoá hết

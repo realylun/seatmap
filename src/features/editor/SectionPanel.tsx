@@ -100,6 +100,66 @@ type FormProps = {
   readonly onDelete: (id: string) => void;
 };
 
+const ID_FIELD = FIELDS.filter((f) => f.key === "id");
+
+function DeleteButton({
+  id,
+  onDelete,
+}: {
+  id: string;
+  onDelete: (id: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="mt-2 rounded border border-red-200 px-3 py-1 text-sm text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-400"
+      onClick={() => onDelete(id)}
+    >
+      Xoá section
+    </button>
+  );
+}
+
+// Khu nhập từ SVG có ghế đặt tay: tham số sinh row không có tác dụng → chỉ cho đổi tên
+function ExplicitSectionForm({
+  section,
+  onChange,
+  onDelete,
+}: FormProps & { section: SectionConfig }) {
+  const rows = section.explicitRows ?? [];
+  const seats = rows.reduce((n, r) => n + r.seats.length, 0);
+  const convert = () => {
+    const ok = window.confirm(
+      `Bỏ ${seats} ghế đặt tay của ${section.id} và sinh ghế tự động theo tham số row?`,
+    );
+    if (ok)
+      onChange({ explicitRows: undefined, rowCount: Math.max(1, rows.length) });
+  };
+  return (
+    <div>
+      <h3 className="mb-2 text-sm font-semibold">Cấu hình {section.id}</h3>
+      <p className="mb-3 rounded bg-blue-50 px-2 py-1 text-sm text-blue-800 dark:bg-blue-950 dark:text-blue-300">
+        Ghế từ SVG: {rows.length} row · {seats} ghế. Sửa vị trí ghế trong file
+        SVG rồi nhập lại.
+      </p>
+      {ID_FIELD.map((field) => (
+        <FieldInput
+          key={field.key}
+          field={field}
+          section={section}
+          onChange={onChange}
+        />
+      ))}
+      <button type="button" className={smallBtnCls} onClick={convert}>
+        Chuyển sang sinh tự động
+      </button>
+      <div>
+        <DeleteButton id={section.id} onDelete={onDelete} />
+      </div>
+    </div>
+  );
+}
+
 export function SectionForm({ section, onChange, onDelete }: FormProps) {
   if (!section) {
     return (
@@ -108,6 +168,14 @@ export function SectionForm({ section, onChange, onDelete }: FormProps) {
       </p>
     );
   }
+  if (section.explicitRows)
+    return (
+      <ExplicitSectionForm
+        section={section}
+        onChange={onChange}
+        onDelete={onDelete}
+      />
+    );
   return (
     <div>
       <h3 className="mb-2 text-sm font-semibold">Cấu hình {section.id}</h3>
@@ -155,13 +223,7 @@ export function SectionForm({ section, onChange, onDelete }: FormProps) {
           <option value="rtl">Phải → trái</option>
         </select>
       </label>
-      <button
-        type="button"
-        className="mt-2 rounded border border-red-200 px-3 py-1 text-sm text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-400"
-        onClick={() => onDelete(section.id)}
-      >
-        Xoá section
-      </button>
+      <DeleteButton id={section.id} onDelete={onDelete} />
     </div>
   );
 }
