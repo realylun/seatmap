@@ -1,0 +1,12 @@
+{
+  "recommendations": [
+    "oxc.oxc-vscode",
+    "typescriptteam.native-preview",
+    "bradlc.vscode-tailwindcss"
+  ],
+  "unwantedRecommendations": [
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode",
+    "biomejs.biome"
+  ]
+}
