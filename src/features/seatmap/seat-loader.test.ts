@@ -206,6 +206,41 @@ describe("createSeatLoader", () => {
     expect(errors).toHaveBeenCalled();
   });
 
+  it("reports each batch of seats once it is in the source", async () => {
+    const { map, addedSids } = fakeMap();
+    const added: string[] = [];
+    const loader = createSeatLoader(map, mapVenue, OVERVIEW_URL, (seats) =>
+      added.push(...seats.map((s) => s.properties.sid)),
+    );
+    loader.update([], null);
+    await settle();
+    expect(added.toSorted()).toEqual(addedSids().toSorted());
+    expect(added.length).toBeGreaterThan(0);
+  });
+
+  it("does not report seats that land after the loader is disposed", async () => {
+    const { map } = fakeMap();
+    // updateData treo tới khi gọi release(): mô phỏng đổi venue trong lúc ghế đang vào source
+    const pending: (() => void)[] = [];
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+    const source = map.getSource("seats") as unknown as {
+      updateData: (diff: unknown) => Promise<void>;
+    };
+    source.updateData = () =>
+      new Promise<void>((resolve) => pending.push(resolve));
+    const added: string[] = [];
+    const loader = createSeatLoader(map, mapVenue, OVERVIEW_URL, (seats) =>
+      added.push(...seats.map((s) => s.properties.sid)),
+    );
+    loader.update([], null);
+    await settle();
+    expect(pending.length).toBeGreaterThan(1); // removeAll + ít nhất 1 đợt add
+    loader.dispose();
+    for (const release of pending) release();
+    await settle();
+    expect(added).toEqual([]);
+  });
+
   it("does not retry a chunk the server says is missing", async () => {
     respond = () => Promise.resolve(new Response(null, { status: 404 }));
     vi.spyOn(console, "error").mockImplementation(() => {});

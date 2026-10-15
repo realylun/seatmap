@@ -32,6 +32,7 @@ import { FpsOverlay } from "./fps/FpsOverlay";
 import { addPillImages } from "./pills";
 import { SeatCountBadge } from "./SeatCountBadge";
 import { useSectionSeats } from "./use-section-seats";
+import { useSelectedSeatNumbers } from "./use-selected-seat-numbers";
 
 configureMapLibreWorker();
 
@@ -218,12 +219,14 @@ export default function SeatMap(props: SeatMapProps) {
     () => [selectedSection, flyRequest?.section ?? null],
     [selectedSection, flyRequest],
   );
+  const onSeatsAdded = useSelectedSeatNumbers(map, venue, props.selection);
   useSectionSeats(
     map,
     venue,
     props.overviewUrl,
     pinnedSections,
     hoveredSection,
+    onSeatsAdded,
   );
 
   const is3d = useTiltMode(map);
