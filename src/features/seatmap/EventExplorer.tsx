@@ -200,6 +200,7 @@ export function EventExplorer({ eventId, geometryUrl, canBuy, viewed }: Props) {
         className="order-1 h-[55vh] min-h-[360px] lg:order-2 lg:h-full"
       >
         <SeatMap
+          eventId={eventId}
           geometryUrl={geometryUrl}
           availability={availability.data}
           listings={state.mapListings}

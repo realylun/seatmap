@@ -23,6 +23,7 @@ import { labelFeatures } from "./labels";
 import { parseMapVenue, type MapSection, type MapVenue } from "./map-venue";
 import { rowMarkers, sectionMarkers, sectionShape } from "./markers";
 import { configureMapLibreWorker } from "./maplibre-worker";
+import { FpsOverlay } from "./fps/FpsOverlay";
 import { addPillImages } from "./pills";
 import { SeatCountBadge } from "./SeatCountBadge";
 
@@ -40,6 +41,7 @@ const EMPTY_STATES: StateMap = new Map();
 export type FlyRequest = { readonly section: string; readonly key: number };
 
 export type SeatMapProps = {
+  eventId: string;
   geometryUrl: string;
   availability: DecodedAvailability | null;
   listings: readonly Listing[];
@@ -270,6 +272,7 @@ export default function SeatMap(props: SeatMapProps) {
       >
         <NavigationControl position="top-right" showCompass={false} />
       </MapGL>
+      <FpsOverlay map={map} eventId={props.eventId} />
       <div className="absolute top-24 right-2.5 flex flex-col items-end gap-1.5">
         <button
           type="button"
