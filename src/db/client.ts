@@ -24,16 +24,38 @@ export function isLocalDatabaseUrl(url: string): boolean {
   }
 }
 
-/** One factory for every consumer (app, seed, contention test). */
-export function createPoolDb(url: string): AppDb {
+/** One factory for every consumer (app, seed, contention test). `max` = pool size (default 10). */
+export function createPoolDb(url: string, max = POOL_MAX): AppDb {
   if (isLocalDatabaseUrl(url)) {
-    return drizzleNodePg(new PgPool({ connectionString: url, max: POOL_MAX }), {
-      schema,
-    });
+    return drizzleNodePg(
+      guardConnectionErrors(new PgPool({ connectionString: url, max })),
+      { schema },
+    );
   }
-  return drizzleNeonPool(new NeonPool({ connectionString: url }), {
-    schema,
-  });
+  return drizzleNeonPool(
+    guardConnectionErrors(new NeonPool({ connectionString: url, max })),
+    { schema },
+  );
+}
+
+type ErrorEmitter = {
+  on(event: "error", listener: (error: Error) => void): unknown;
+};
+
+const logConnectionError = (error: Error) =>
+  console.error("Database connection failed:", error);
+
+// A dropped connection (e.g. Neon closing the WebSocket) emits "error" on the pool when idle and on
+// the client when checked out; unhandled, either crashes the process. With listeners the pending
+// query rejects instead and the pool replaces the client.
+function guardConnectionErrors<
+  P extends ErrorEmitter & {
+    on(event: "connect", listener: (client: ErrorEmitter) => void): unknown;
+  },
+>(pool: P): P {
+  pool.on("error", logConnectionError);
+  pool.on("connect", (client) => client.on("error", logConnectionError));
+  return pool;
 }
 
 function createHttpDb(url: string): AppDb {
