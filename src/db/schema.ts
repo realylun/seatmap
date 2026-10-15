@@ -72,6 +72,8 @@ export const templateVersions = pgTable(
       .references(() => templates.id),
     version: integer("version").notNull(),
     geometryUrl: text("geometry_url").notNull(),
+    // overview.json tải theo tầng (domain/venue/overview.ts); null = version publish trước khi có
+    overviewUrl: text("overview_url"),
     sectionCount: integer("section_count").notNull(),
     seatCount: integer("seat_count").notNull(),
     createdAt: createdAt(),

@@ -21,6 +21,7 @@
     "db:migrate": "dotenv -e .env.local -- drizzle-kit migrate",
     "db:seed": "dotenv -e .env.local -- tsx src/db/seed.ts",
     "db:simulate-sales": "dotenv -e .env.local -- tsx src/db/simulate-sales.ts",
+    "db:backfill-overviews": "dotenv -e .env.local -- tsx src/db/backfill-overviews.ts",
     "test:neon": "dotenv -e .env.local -- vitest run contention.neon"
   },
   "dependencies": {

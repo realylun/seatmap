@@ -29,6 +29,13 @@
       "when": 1792073065900,
       "tag": "0003_chief_skin",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792078253900,
+      "tag": "0004_tired_firestar",
+      "breakpoints": true
     }
   ]
 }

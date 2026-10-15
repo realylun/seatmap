@@ -1,10 +1,19 @@
 import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { templateVersions, templates } from "@/db/schema";
-import { serializeGeometry } from "@/domain/venue/geometry-json";
+import {
+  roundGeometryNumber,
+  serializeGeometry,
+} from "@/domain/venue/geometry-json";
 import { DEFAULT_EXTENT, buildVenue } from "@/domain/venue/venue-file";
-import { editorBlockSchema, venueSchema } from "@/domain/venue/types";
+import { medianSeatSpacing } from "@/domain/venue/seat-spacing";
+import {
+  editorBlockSchema,
+  venueSchema,
+  type Venue,
+} from "@/domain/venue/types";
 import type { PutJson } from "../blob";
+import { IMMUTABLE, uploadSplitGeometry, versionDir } from "./geometry-split";
 import { localBlobUrlSchema } from "./image-url";
 import type { Db } from "../inventory/db";
 import { invalid, type CommandResult } from "./venues";
@@ -50,6 +59,17 @@ export type PublishedVersion = {
   sectionCount: number;
 };
 
+/**
+ * Tính sẵn khoảng cách ghế để client khỏi đo lại mỗi lần mở map (~0,6 s với venue 135k ghế).
+ * Làm tròn trước khi xét > 0: giá trị bị serialize làm tròn về 0 sẽ bị venueSchema từ chối.
+ */
+function withSeatSpacing(venue: Venue): Venue {
+  const seatSpacing = roundGeometryNumber(
+    medianSeatSpacing(venue.geojson.seats),
+  );
+  return seatSpacing > 0 ? { ...venue, seatSpacing } : venue;
+}
+
 /** Builds geometry from the draft editor_state, uploads it to Blob and records an immutable version. */
 export async function publishVersion(
   db: Db,
@@ -82,14 +102,28 @@ export async function publishVersion(
     .limit(1);
   const version = (latest?.version ?? 0) + 1;
 
+  const geometry = withSeatSpacing(venue.data);
   const { url } = await putJson(
     `geometry/${templateId}/v${version}.json`,
-    serializeGeometry(venue.data),
+    serializeGeometry(geometry),
+    IMMUTABLE,
+  );
+  const overviewUrl = await uploadSplitGeometry(
+    putJson,
+    versionDir(templateId, version),
+    geometry,
   );
   const sectionCount = venue.data.sections.length;
   const [row] = await db
     .insert(templateVersions)
-    .values({ templateId, version, geometryUrl: url, sectionCount, seatCount })
+    .values({
+      templateId,
+      version,
+      geometryUrl: url,
+      overviewUrl,
+      sectionCount,
+      seatCount,
+    })
     .returning({ id: templateVersions.id });
   return { ok: true, value: { id: row.id, version, seatCount, sectionCount } };
 }

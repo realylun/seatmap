@@ -44,6 +44,7 @@ const SeatMap = dynamic(() => import("./SeatMap"), {
 type Props = {
   eventId: string;
   geometryUrl: string;
+  overviewUrl: string | null;
   canBuy: boolean;
   viewed: ViewedEvent;
 };
@@ -91,7 +92,13 @@ function useListingState(eventId: string) {
   };
 }
 
-export function EventExplorer({ eventId, geometryUrl, canBuy, viewed }: Props) {
+export function EventExplorer({
+  eventId,
+  geometryUrl,
+  overviewUrl,
+  canBuy,
+  viewed,
+}: Props) {
   const state = useListingState(eventId);
   const { availability, filters, seatBySid } = state;
   const [selection, dispatch] = useReducer(selectionReducer, []);
@@ -202,6 +209,7 @@ export function EventExplorer({ eventId, geometryUrl, canBuy, viewed }: Props) {
         <SeatMap
           eventId={eventId}
           geometryUrl={geometryUrl}
+          overviewUrl={overviewUrl}
           availability={availability.data}
           listings={state.mapListings}
           selection={selection}

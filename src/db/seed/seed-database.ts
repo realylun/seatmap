@@ -189,8 +189,8 @@ export async function seedDatabase(
   );
   // Giữ lại JSON vừa upload để snapshot ghế không phải tải lại geometry từ Blob
   const uploaded = new Map<string, string>();
-  const recordingPut: PutJson = async (pathname, json) => {
-    const result = await deps.putJson(pathname, json);
+  const recordingPut: PutJson = async (pathname, json, options) => {
+    const result = await deps.putJson(pathname, json, options);
     uploaded.set(result.url, json);
     return result;
   };
