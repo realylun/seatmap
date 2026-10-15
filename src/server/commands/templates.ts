@@ -1,9 +1,17 @@
 import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { templateVersions, templates } from "@/db/schema";
-import { serializeGeometry } from "@/domain/venue/geometry-json";
+import {
+  roundGeometryNumber,
+  serializeGeometry,
+} from "@/domain/venue/geometry-json";
 import { DEFAULT_EXTENT, buildVenue } from "@/domain/venue/venue-file";
-import { editorBlockSchema, venueSchema } from "@/domain/venue/types";
+import { medianSeatSpacing } from "@/domain/venue/seat-spacing";
+import {
+  editorBlockSchema,
+  venueSchema,
+  type Venue,
+} from "@/domain/venue/types";
 import type { PutJson } from "../blob";
 import { localBlobUrlSchema } from "./image-url";
 import type { Db } from "../inventory/db";
@@ -50,6 +58,17 @@ export type PublishedVersion = {
   sectionCount: number;
 };
 
+/**
+ * Tính sẵn khoảng cách ghế để client khỏi đo lại mỗi lần mở map (~0,6 s với venue 135k ghế).
+ * Làm tròn trước khi xét > 0: giá trị bị serialize làm tròn về 0 sẽ bị venueSchema từ chối.
+ */
+function withSeatSpacing(venue: Venue): Venue {
+  const seatSpacing = roundGeometryNumber(
+    medianSeatSpacing(venue.geojson.seats),
+  );
+  return seatSpacing > 0 ? { ...venue, seatSpacing } : venue;
+}
+
 /** Builds geometry from the draft editor_state, uploads it to Blob and records an immutable version. */
 export async function publishVersion(
   db: Db,
@@ -84,7 +103,7 @@ export async function publishVersion(
 
   const { url } = await putJson(
     `geometry/${templateId}/v${version}.json`,
-    serializeGeometry(venue.data),
+    serializeGeometry(withSeatSpacing(venue.data)),
   );
   const sectionCount = venue.data.sections.length;
   const [row] = await db

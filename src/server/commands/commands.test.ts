@@ -8,7 +8,10 @@ import {
   exportFile,
   updateSection,
 } from "@/domain/venue/venue-file";
+import { medianSeatSpacing } from "@/domain/venue/seat-spacing";
+import { venueSchema } from "@/domain/venue/types";
 import { createTestDb } from "@/test/pglite";
+import type { PutJson } from "../blob";
 import {
   assignTierToSeats,
   blockSeats,
@@ -79,7 +82,7 @@ describe("templates", () => {
 
   it("publishVersion uploads geometry and records counts, versions increment", async () => {
     const { templateId } = await setupTemplate();
-    const putJson = vi.fn(async (path: string) => ({
+    const putJson = vi.fn<PutJson>(async (path) => ({
       url: `https://blob.test/${path}`,
     }));
     const v1 = await publishVersion(ctx.db, putJson, templateId);
@@ -90,6 +93,13 @@ describe("templates", () => {
     });
     expect(v2).toMatchObject({ ok: true, value: { version: 2 } });
     expect(putJson.mock.calls[0][0]).toBe(`geometry/${templateId}/v1.json`);
+    // seatSpacing tính sẵn để client không phải đo lại (~0,6 s với venue 135k ghế); đo lại trên
+    // toạ độ đã làm tròn 6 chữ số nên chỉ so tới 5 chữ số
+    const uploaded = venueSchema.parse(JSON.parse(putJson.mock.calls[0][1]));
+    expect(uploaded.seatSpacing).toBeCloseTo(
+      medianSeatSpacing(uploaded.geojson.seats),
+      5,
+    );
     const rows = await ctx.db
       .select()
       .from(templateVersions)

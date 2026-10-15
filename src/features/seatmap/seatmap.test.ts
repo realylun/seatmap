@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildListings } from "@/domain/seats/listings";
+import { medianSeatSpacing } from "@/domain/venue/seat-spacing";
 import { buildVenue } from "@/domain/venue/venue-file";
 import type { SectionConfig } from "@/domain/venue/types";
 import {
@@ -75,6 +76,29 @@ describe("map venue", () => {
   it("rejects invalid geometry", () => {
     expect(() => parseMapVenue({ version: 2 })).toThrow(/invalid/);
     expect(parseMapVenue(venue).sections).toHaveLength(2);
+  });
+
+  it("uses the seat spacing precomputed at publish time", () => {
+    expect(toMapVenue({ ...venue, seatSpacing: 0.123 }).seatSpacing).toBe(
+      0.123,
+    );
+    const json = JSON.parse(JSON.stringify({ ...venue, seatSpacing: 0.123 }));
+    expect(parseMapVenue(json).seatSpacing).toBe(0.123);
+  });
+
+  it("measures seat spacing for files published without it", () => {
+    const measured = medianSeatSpacing(venue.geojson.seats);
+    expect(measured).toBeGreaterThan(0);
+    expect(toMapVenue(venue).seatSpacing).toBe(measured);
+  });
+
+  it("rejects a non-positive precomputed seat spacing", () => {
+    expect(() => parseMapVenue({ ...venue, seatSpacing: 0 })).toThrow(
+      /invalid/,
+    );
+    expect(() => parseMapVenue({ ...venue, seatSpacing: -1 })).toThrow(
+      /invalid/,
+    );
   });
 });
 

@@ -2,7 +2,8 @@
 // geojson có thêm `rid`/`sid` để promoteId (feature-state theo row / ghế, như seatmap-demo/style.js).
 import { rowKey } from "@/domain/seats/seat-id";
 import { venueSchema, type Point, type Venue } from "@/domain/venue/types";
-import { medianSeatSpacing, outlineRing } from "./venue-shape";
+import { medianSeatSpacing } from "@/domain/venue/seat-spacing";
+import { outlineRing } from "./venue-shape";
 
 /** Viền sân nới ra ngoài bao lồi các section bấy nhiêu (tỉ lệ) */
 const OUTLINE_SCALE = 0.04;
@@ -112,7 +113,7 @@ export function toMapVenue(venue: Venue): MapVenue {
   return {
     bounds: venue.bounds,
     focus: sectionsCenter(sections) ?? midpoint(venue.bounds),
-    seatSpacing: medianSeatSpacing(seats),
+    seatSpacing: venue.seatSpacing ?? medianSeatSpacing(seats),
     sections,
     geojson: {
       outline: outline(sections),

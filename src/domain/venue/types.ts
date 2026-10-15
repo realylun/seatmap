@@ -120,6 +120,8 @@ export const venueSectionSchema = z.object({
 export const venueSchema = z.object({
   version: z.literal(1),
   bounds: z.tuple([pointSchema, pointSchema]),
+  // khoảng cách ghế đặc trưng, publish tính sẵn (seat-spacing.ts); thiếu = file cũ, client tự đo
+  seatSpacing: z.number().positive().optional(),
   sections: z.array(venueSectionSchema),
   geojson: z.object({
     field: collection(anyFeatureSchema),
