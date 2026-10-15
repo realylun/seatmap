@@ -10,7 +10,7 @@ const SHORT_CDN_CACHE = {
   "Cache-Control": "public, s-maxage=2, stale-while-revalidate=5",
 };
 
-/** Trạng thái ghế động: không cache, client poll 15s. */
+/** Trạng thái ghế động (chỉ ghế không trống): cache CDN rất ngắn, client poll 15s. */
 export async function GET(
   _req: NextRequest,
   ctx: RouteContext<"/api/events/[id]/availability">,

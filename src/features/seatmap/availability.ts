@@ -1,4 +1,5 @@
-// Giải mã payload gọn của /api/events/[id]/availability → SeatAvailability cho listing + map.
+// Giải mã 2 payload gọn: /api/events/[id]/layout (tier của mọi ghế, tải một lần) +
+// /api/events/[id]/availability (chỉ ghế không trống, poll) → SeatAvailability cho listing + map.
 import { z } from "zod";
 import type { SeatAvailability, SeatStatus } from "@/domain/seats/listings";
 
@@ -17,18 +18,19 @@ const tierSchema = z.object({
   color: z.string(),
 });
 
-export const availabilityPayloadSchema = z.object({
+const layoutSchema = z.object({
   tiers: z.array(tierSchema),
-  seats: z.array(
-    z.tuple([
-      z.string(),
-      z.number().int().min(-1),
-      z.number().int().min(0).max(3),
-    ]),
-  ),
+  /** [tierIdx or -1, sids] */
+  groups: z.array(z.tuple([z.number().int().min(-1), z.array(z.string())])),
 });
 
-export type AvailabilityPayload = z.infer<typeof availabilityPayloadSchema>;
+const statusSchema = z.object({
+  /** [sid, statusCode] — chỉ ghế không trống */
+  seats: z.array(z.tuple([z.string(), z.number().int().min(0).max(3)])),
+});
+
+export type LayoutPayload = z.infer<typeof layoutSchema>;
+export type StatusPayload = z.infer<typeof statusSchema>;
 export type Tier = z.infer<typeof tierSchema>;
 
 export type DecodedAvailability = {
@@ -37,22 +39,37 @@ export type DecodedAvailability = {
   readonly tierBySid: ReadonlyMap<string, Tier>;
 };
 
-export function decodeAvailability(json: unknown): DecodedAvailability {
-  const parsed = availabilityPayloadSchema.safeParse(json);
+export function parseLayout(json: unknown): LayoutPayload {
+  const parsed = layoutSchema.safeParse(json);
+  if (!parsed.success) throw new Error("Seat layout response is invalid");
+  return parsed.data;
+}
+
+export function parseStatus(json: unknown): StatusPayload {
+  const parsed = statusSchema.safeParse(json);
   if (!parsed.success) throw new Error("Availability response is invalid");
-  const { tiers, seats } = parsed.data;
-  const decoded = seats.map(([sid, tierIdx, code]) => {
+  return parsed.data;
+}
+
+/** Ghép layout + status: ghế có trong layout mà vắng ở status là "available"; sid lạ ở status bị bỏ qua. */
+export function mergeAvailability(
+  layout: LayoutPayload,
+  status: StatusPayload,
+): DecodedAvailability {
+  const { tiers, groups } = layout;
+  const codeBySid = new Map(status.seats);
+  const decoded = groups.flatMap(([tierIdx, sids]) => {
     const tier = tiers[tierIdx] as Tier | undefined;
-    return {
+    return sids.map((sid) => ({
       sid,
       tier,
       seat: {
         sid,
         tierId: tier?.id ?? null,
         price: tier?.price ?? null,
-        status: STATUS_BY_CODE[code],
+        status: STATUS_BY_CODE[codeBySid.get(sid) ?? 0],
       } satisfies SeatAvailability,
-    };
+    }));
   });
   return {
     tiers,

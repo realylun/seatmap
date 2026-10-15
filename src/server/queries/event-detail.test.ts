@@ -17,6 +17,7 @@ vi.mock("@/db/client", () => ({
 }));
 
 const queries = await import("./event-detail");
+const { getCachedSeatLayout } = await import("./seat-layout");
 const { cacheTag } = await import("next/cache");
 
 let ctx: TestDb;
@@ -130,5 +131,15 @@ describe("getHoldSummary / getOrderSummary", () => {
     });
     expect(order?.items).toHaveLength(2);
     expect(await queries.getOrderSummary(crypto.randomUUID())).toBeNull();
+  });
+});
+
+describe("getCachedSeatLayout", () => {
+  it("tags the event so admin tier edits (updateTag event:<id>) invalidate it", async () => {
+    const { event, tier } = await setup();
+    const layout = await getCachedSeatLayout(event.id);
+    expect(layout.tiers.map((t) => t.id)).toEqual([tier.id]);
+    expect(layout.groups).toEqual([[0, ["A|1|1", "A|1|2", "A|1|3"]]]);
+    expect(cacheTag).toHaveBeenCalledWith(`event:${event.id}`);
   });
 });

@@ -8,8 +8,9 @@ import {
   buildVenue,
   updateSection,
 } from "@/domain/venue/venue-file";
-import { STATUS_BY_CODE } from "@/features/seatmap/availability";
+import { mergeAvailability } from "@/features/seatmap/availability";
 import { getAvailability } from "@/server/inventory/availability";
+import { getSeatLayout } from "@/server/inventory/layout";
 import { createTestDb } from "@/test/pglite";
 import {
   assignTierToSections,
@@ -131,13 +132,10 @@ describe("AC6: blocked seats are not listed", () => {
     await assignTierToSections(db, event.id, ["S001"], tierId);
 
     const listed = async () => {
-      const av = await getAvailability(db, event.id);
-      const seats = av.seats.map(([sid, tierIdx, code]) => ({
-        sid,
-        tierId: av.tiers[tierIdx]?.id ?? null,
-        price: av.tiers[tierIdx]?.price ?? null,
-        status: STATUS_BY_CODE[code],
-      }));
+      const { seats } = mergeAvailability(
+        await getSeatLayout(db, event.id),
+        await getAvailability(db, event.id),
+      );
       return buildListings(seats).flatMap((l) => l.runs.flatMap((r) => r.sids));
     };
     expect(await listed()).toHaveLength(8);

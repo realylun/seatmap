@@ -2,7 +2,13 @@ import { describe, expect, it } from "vitest";
 import { buildListings } from "@/domain/seats/listings";
 import { buildVenue } from "@/domain/venue/venue-file";
 import type { SectionConfig } from "@/domain/venue/types";
-import { decodeAvailability, isSelectable, seatCounts } from "./availability";
+import {
+  mergeAvailability,
+  isSelectable,
+  parseLayout,
+  parseStatus,
+  seatCounts,
+} from "./availability";
 import { buildStyle, PROMOTE, SEAT_LEVEL, SWITCH_LEVEL } from "./build-style";
 import { boundsCenter, ringBounds } from "./camera";
 import {
@@ -50,6 +56,9 @@ const tiers = [
   { id: "t1", name: "Cat 1", price: 500_000, color: "#E4572E" },
   { id: "t2", name: "Cat 2", price: 1_200_000, color: "#1E7A1E" },
 ];
+
+const decode = (layout: unknown, status: unknown) =>
+  mergeAvailability(parseLayout(layout), parseStatus(status));
 
 describe("map venue", () => {
   it("adds rid / sid for promoteId and row centers", () => {
@@ -188,18 +197,30 @@ describe("labels", () => {
 });
 
 describe("availability decoding", () => {
-  const payload = {
+  const layout = {
     tiers,
+    groups: [
+      [0, ["101|A|1", "101|A|2"]],
+      [-1, ["101|A|3"]],
+      [1, ["102|B|1"]],
+    ],
+  };
+  const status = {
     seats: [
-      ["101|A|1", 0, 0],
-      ["101|A|2", 0, 1],
-      ["101|A|3", -1, 0],
-      ["102|B|1", 1, 2],
+      ["101|A|2", 1],
+      ["102|B|1", 2],
     ],
   };
 
-  it("maps tier index and status code", () => {
-    const d = decodeAvailability(payload);
+  it("merges layout + status; seats missing from status are available", () => {
+    const d = decode(layout, status);
+    expect(d.tiers).toEqual(tiers);
+    expect(d.seats.map((s) => s.sid)).toEqual([
+      "101|A|1",
+      "101|A|2",
+      "101|A|3",
+      "102|B|1",
+    ]);
     expect(d.seats[0]).toEqual({
       sid: "101|A|1",
       tierId: "t1",
@@ -207,23 +228,46 @@ describe("availability decoding", () => {
       status: "available",
     });
     expect(d.seats[1].status).toBe("held");
-    expect(d.seats[2]).toMatchObject({ tierId: null, price: null });
+    expect(d.seats[2]).toMatchObject({
+      tierId: null,
+      price: null,
+      status: "available",
+    });
     expect(d.seats[3]).toMatchObject({ tierId: "t2", status: "sold" });
     expect(d.tierBySid.get("102|B|1")?.color).toBe("#1E7A1E");
     expect(d.tierBySid.has("101|A|3")).toBe(false);
   });
 
+  it("ignores status for sids not in the layout and keeps totals from the layout", () => {
+    const d = decode(layout, { seats: [["999|Z|1", 3]] });
+    expect(seatCounts(d.seats)).toEqual({
+      total: 4,
+      available: 4,
+      held: 0,
+      sold: 0,
+      blocked: 0,
+    });
+    expect(seatCounts(decode(layout, status).seats)).toEqual({
+      total: 4,
+      available: 2,
+      held: 1,
+      sold: 1,
+      blocked: 0,
+    });
+  });
+
   it("only available tiered seats are selectable", () => {
-    const d = decodeAvailability(payload);
+    const d = decode(layout, status);
     expect(d.seats.map(isSelectable)).toEqual([true, false, false, false]);
     expect(isSelectable(undefined)).toBe(false);
   });
 
   it("rejects malformed payloads", () => {
-    expect(() =>
-      decodeAvailability({ tiers: [], seats: [["x", 0, 9]] }),
-    ).toThrow();
-    expect(() => decodeAvailability(null)).toThrow();
+    expect(() => parseStatus({ seats: [["x", 9]] })).toThrow();
+    expect(() => parseStatus({ seats: [["x", 0, 0]] })).toThrow();
+    expect(() => parseStatus(null)).toThrow();
+    expect(() => parseLayout({ tiers: [], groups: [[-2, []]] })).toThrow();
+    expect(() => parseLayout(null)).toThrow();
   });
 });
 
@@ -261,13 +305,16 @@ describe("markers and feature states", () => {
   });
 
   it("derives seat/row/section states and diffs them", () => {
-    const d = decodeAvailability({
-      tiers,
-      seats: [
-        ["101|A|1", 0, 0],
-        ["101|A|2", -1, 3],
-      ],
-    });
+    const d = decode(
+      {
+        tiers,
+        groups: [
+          [0, ["101|A|1"]],
+          [-1, ["101|A|2"]],
+        ],
+      },
+      { seats: [["101|A|2", 3]] },
+    );
     const seats = seatStates(d.seats, d.tierBySid);
     expect(seats.get("101|A|1")).toEqual({ color: "#E4572E", status: 0 });
     expect(seats.get("101|A|2")).toEqual({ color: null, status: 3 });
@@ -320,14 +367,10 @@ describe("selection reducer", () => {
   });
 
   it("works with listings picked from availability", () => {
-    const d = decodeAvailability({
-      tiers,
-      seats: [
-        ["101|A|1", 0, 0],
-        ["101|A|2", 0, 0],
-        ["101|A|4", 0, 0],
-      ],
-    });
+    const d = decode(
+      { tiers, groups: [[0, ["101|A|1", "101|A|2", "101|A|4"]]] },
+      { seats: [] },
+    );
     const [listing] = buildListings(d.seats, { quantity: 2 });
     expect(listing.maxRun).toBe(2);
   });

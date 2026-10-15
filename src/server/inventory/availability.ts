@@ -1,55 +1,46 @@
-import { asc, eq } from "drizzle-orm";
-import { eventSeats, priceTiers } from "@/db/schema";
-import { encodeSid } from "@/domain/seats/seat-id";
-import { RECLAIM_GRACE_SECONDS, SEAT_STATUS_CODE, type Db } from "./db";
+import { and, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
+import { eventSeats } from "@/db/schema";
+import { RECLAIM_GRACE_SECONDS, SEAT_STATUS_CODE, dbNow, type Db } from "./db";
+import { checkedSids, sidsAggSql } from "./seat-sql";
 
 export type Availability = {
-  tiers: { id: string; name: string; price: number; color: string }[];
-  /** [sid, tierIdx or -1, statusCode] */
-  seats: [string, number, number][];
+  /** [sid, statusCode] — chỉ ghế không trống; ghế vắng mặt = available */
+  seats: [string, number][];
 };
 
-/** Expired holds read as available (lazy expiry). */
+const NOT_AVAILABLE = ["held", "sold", "blocked"] as const;
+
+/**
+ * Trạng thái động (poll): chỉ ghế held/sold/blocked, gom theo status trong Postgres.
+ * Hold hết hạn quá RECLAIM_GRACE_SECONDS đọc như available (lazy expiry) nên bị loại.
+ */
 export async function getAvailability(
   db: Db,
   eventId: string,
-  now: Date = new Date(),
+  now?: Date,
 ): Promise<Availability> {
-  const tiers = await db
-    .select({
-      id: priceTiers.id,
-      name: priceTiers.name,
-      price: priceTiers.price,
-      color: priceTiers.color,
-    })
-    .from(priceTiers)
-    .where(eq(priceTiers.eventId, eventId))
-    .orderBy(asc(priceTiers.price), asc(priceTiers.id));
-  const tierIdx = new Map(tiers.map((t, i) => [t.id, i]));
-
+  const reclaimable = sql`${eventSeats.heldUntil} < ${dbNow(now)} - ${RECLAIM_GRACE_SECONDS} * interval '1 second'`;
   const rows = await db
-    .select({
-      section: eventSeats.section,
-      row: eventSeats.row,
-      seat: eventSeats.seat,
-      tierId: eventSeats.tierId,
-      status: eventSeats.status,
-      heldUntil: eventSeats.heldUntil,
-    })
+    .select({ status: eventSeats.status, sids: sidsAggSql })
     .from(eventSeats)
-    .where(eq(eventSeats.eventId, eventId));
-
-  const seats = rows.map((r): [string, number, number] => {
-    const expired =
-      r.status === "held" &&
-      r.heldUntil !== null &&
-      r.heldUntil.getTime() < now.getTime() - RECLAIM_GRACE_SECONDS * 1000;
-    const status = expired ? "available" : r.status;
-    return [
-      encodeSid(r),
-      r.tierId ? (tierIdx.get(r.tierId) ?? -1) : -1,
+    .where(
+      and(
+        eq(eventSeats.eventId, eventId),
+        // IN (...) dùng được event_seats_event_status_idx (event_id, status)
+        inArray(eventSeats.status, [...NOT_AVAILABLE]),
+        or(
+          ne(eventSeats.status, "held"),
+          isNull(eventSeats.heldUntil),
+          sql`not (${reclaimable})`,
+        ),
+      ),
+    )
+    .groupBy(eventSeats.status);
+  const seats = rows.flatMap(({ status, sids }) =>
+    checkedSids(sids).map((sid): [string, number] => [
+      sid,
       SEAT_STATUS_CODE[status],
-    ];
-  });
-  return { tiers, seats };
+    ]),
+  );
+  return { seats };
 }

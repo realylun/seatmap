@@ -131,7 +131,7 @@ describe("createHold", () => {
       now: past,
     });
     const av = await getAvailability(db, event.id);
-    expect(av.seats[0][2]).toBe(0);
+    expect(av.seats).toEqual([]);
     const b = await createHold(db, {
       eventId: event.id,
       seatIds: [ids[0]],
@@ -164,7 +164,7 @@ describe("confirmOrder", () => {
     expect(all).toHaveLength(1);
     expect(all[0].total).toBe(200_000);
     const av = await getAvailability(db, event.id);
-    expect(av.seats.filter((s) => s[2] === 2)).toHaveLength(2);
+    expect(av.seats.filter((s) => s[1] === 2)).toHaveLength(2);
     expect(await releaseHold(db, hold.holdId, "s")).toEqual({ ok: false });
   });
 

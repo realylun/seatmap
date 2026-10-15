@@ -49,7 +49,9 @@ export function SeatAssignPanel({ eventId, geometryUrl, tiers }: Props) {
     );
   };
 
+  /** `tiersChanged`: gán tier → tải lại cả layout (bỏ qua CDN); chặn/bỏ chặn chỉ đổi status */
   const run = (
+    tiersChanged: boolean,
     action: () => Promise<
       | { ok: true; value: { changed: number; ignored: number } }
       | { ok: false; error: string }
@@ -62,7 +64,7 @@ export function SeatAssignPanel({ eventId, geometryUrl, tiers }: Props) {
           ? `${result.value.changed} seats updated${result.value.ignored ? `, ${result.value.ignored} invalid ids ignored` : ""}`
           : result.error,
       );
-      await refresh();
+      await refresh(true, tiersChanged);
       router.refresh();
     });
   };
@@ -107,7 +109,9 @@ export function SeatAssignPanel({ eventId, geometryUrl, tiers }: Props) {
           className={btn}
           disabled={empty || pending}
           onClick={() =>
-            run(() => assignTierToSeatsAction(eventId, sids, tierId || null))
+            run(true, () =>
+              assignTierToSeatsAction(eventId, sids, tierId || null),
+            )
           }
         >
           Assign tier
@@ -115,14 +119,18 @@ export function SeatAssignPanel({ eventId, geometryUrl, tiers }: Props) {
         <button
           className={btn}
           disabled={empty || pending}
-          onClick={() => run(() => blockSeatsAction(eventId, sids, true))}
+          onClick={() =>
+            run(false, () => blockSeatsAction(eventId, sids, true))
+          }
         >
           Block
         </button>
         <button
           className={btn}
           disabled={empty || pending}
-          onClick={() => run(() => blockSeatsAction(eventId, sids, false))}
+          onClick={() =>
+            run(false, () => blockSeatsAction(eventId, sids, false))
+          }
         >
           Unblock
         </button>
