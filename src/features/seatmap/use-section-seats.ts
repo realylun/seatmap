@@ -2,7 +2,7 @@
 // ghim (chọn / bay tới) hoặc section đang hover đổi. Không có overviewUrl (version cũ) → không làm gì, ghế đã có sẵn.
 import type { Map as MapLibreMap } from "maplibre-gl";
 import { useEffect, useEffectEvent, useRef } from "react";
-import type { MapVenue } from "./map-venue";
+import type { MapSeat, MapVenue } from "./map-venue";
 import { createSeatLoader, type SeatLoader } from "./seat-loader";
 
 const NOTHING_TO_CLEAN = () => {};
@@ -14,16 +14,20 @@ export function useSectionSeats(
   overviewUrl: string | null,
   pinned: readonly (string | null)[],
   hovered: string | null,
+  onSeatsAdded: (seats: readonly MapSeat[]) => void,
 ) {
   const loader = useRef<SeatLoader | null>(null);
   // listener moveend luôn đọc pinned mới nhất mà không phải tạo lại loader
   const refresh = useEffectEvent((current: SeatLoader) => {
     current.update(pinned, hovered);
   });
+  const seatsAdded = useEffectEvent(onSeatsAdded);
 
   useEffect(() => {
     if (!map || !venue || !overviewUrl) return NOTHING_TO_CLEAN;
-    const current = createSeatLoader(map, venue, overviewUrl);
+    const current = createSeatLoader(map, venue, overviewUrl, (seats) =>
+      seatsAdded(seats),
+    );
     loader.current = current;
     const onMoveEnd = () => refresh(current);
     map.on("moveend", onMoveEnd);

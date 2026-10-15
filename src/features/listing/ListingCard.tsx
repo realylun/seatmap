@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import type { Listing } from "@/domain/seats/listings";
 import { formatVnd } from "@/domain/pricing/money";
 import { seatRangeLabel, type ListingBadge } from "./listing-filters";
@@ -31,7 +32,10 @@ function Badge({ badge }: { badge: ListingBadge | null }) {
   return null;
 }
 
-export function ListingCard(props: Props) {
+// memo: hover section trên map đổi `hoveredSection` → chỉ thẻ đổi `hovered` mới render lại.
+// Không memo thì mỗi lần rê chuột sang section khác render lại cả danh sách (tụt FPS khi xem 1 section).
+// Các callback truyền vào phải giữ nguyên tham chiếu (useCallback ở EventExplorer).
+export const ListingCard = memo(function ListingCard(props: Props) {
   const { listing, quantity, hovered } = props;
   const seats = seatRangeLabel(listing, quantity);
   return (
@@ -77,4 +81,4 @@ export function ListingCard(props: Props) {
       </button>
     </li>
   );
-}
+});

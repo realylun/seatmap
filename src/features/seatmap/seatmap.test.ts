@@ -119,11 +119,18 @@ describe("buildStyle", () => {
       "row-markers",
       "hovered-section",
       "selected-section",
+      "selected-seats",
       "labels",
     ]) {
       expect(style.sources[id]).toMatchObject({ type: "geojson" });
     }
     expect(style.glyphs).toContain("{fontstack}");
+  });
+
+  it("draws seat numbers only from the selected-seats source", () => {
+    const numbers = layer("seat-numbers");
+    expect(numbers).toMatchObject({ type: "symbol", source: "selected-seats" });
+    expect(JSON.stringify(numbers)).not.toContain("feature-state");
   });
 
   it("switches pins at SWITCH_LEVEL and draws seats from SEAT_LEVEL", () => {

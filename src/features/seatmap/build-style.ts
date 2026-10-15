@@ -58,6 +58,7 @@ export const DYNAMIC_SOURCES = [
   "row-markers",
   "hovered-section",
   "selected-section",
+  "selected-seats",
   "labels",
 ] as const;
 
@@ -200,11 +201,11 @@ function seatLayers(spacing: number): LayerSpecification[] {
         "circle-stroke-opacity": fadeInSeats(1),
       },
     },
-    // Số ghế chỉ hiện trên ghế đang chọn (feature-state không dùng được trong filter → ẩn bằng opacity)
+    // Số ghế chỉ cho ghế đang chọn: source riêng, nhỏ (seat-numbers.ts), không dựng glyph cho mọi ghế
     {
       id: "seat-numbers",
       type: "symbol",
-      source: "seats",
+      source: "selected-seats",
       minzoom: SEAT_LEVEL,
       layout: {
         "text-field": ["to-string", ["get", "seat"]],
@@ -214,10 +215,7 @@ function seatLayers(spacing: number): LayerSpecification[] {
         "text-ignore-placement": true,
         "text-pitch-alignment": "viewport",
       },
-      paint: {
-        "text-color": COLORS.seatNumber,
-        "text-opacity": ["case", isSelected, 1, 0],
-      },
+      paint: { "text-color": COLORS.seatNumber },
     },
   ];
 }

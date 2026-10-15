@@ -59,6 +59,8 @@ export function createSeatLoader(
   map: MapLibreMap,
   venue: MapVenue,
   overviewUrl: string,
+  /** Gọi sau khi một đợt ghế đã vào source (vd. để dựng số cho ghế đang chọn) */
+  onSeatsAdded?: (seats: readonly MapSeat[]) => void,
 ): SeatLoader {
   const chunkOf = new Map(
     venue.sections.flatMap((s) => (s.chunk ? [[s.id, s.chunk] as const] : [])),
@@ -107,10 +109,20 @@ export function createSeatLoader(
       for (const id of ids) waiting.delete(id); // source mất (đổi style): lần update sau tải lại
       return;
     }
+    const seats = batch.flatMap((a) => a.seats);
     source
-      .updateData({ add: batch.flatMap((a) => a.seats) })
+      .updateData({ add: seats })
       .then(
-        () => ids.forEach((id) => loaded.add(id)),
+        () => {
+          // dispose trong lúc updateData chạy (đổi venue): không báo ghế cũ cho venue mới
+          if (signal.aborted) return;
+          ids.forEach((id) => loaded.add(id));
+          try {
+            onSeatsAdded?.(seats);
+          } catch (error) {
+            console.error("onSeatsAdded failed", { error });
+          }
+        },
         (error: unknown) => console.error("seat chunk add failed", { error }),
       )
       .finally(() => {
