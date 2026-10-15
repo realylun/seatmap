@@ -8,6 +8,7 @@ import {
   jsonb,
   pgEnum,
   pgTable,
+  real,
   text,
   timestamp,
   unique,
@@ -190,6 +191,37 @@ export const orderItems = pgTable("order_items", {
   price: integer("price").notNull(),
 });
 
+/** Telemetry FPS seatmap: 1 dòng / phiên xem (upsert theo session_id) */
+export const fpsSamples = pgTable(
+  "fps_samples",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    sessionId: text("session_id").notNull().unique(),
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+    avgFps: real("avg_fps").notNull(),
+    p50FrameMs: real("p50_frame_ms").notNull(),
+    p95FrameMs: real("p95_frame_ms").notNull(),
+    longFrames: integer("long_frames").notNull(),
+    frames: integer("frames").notNull(),
+    interactionMs: integer("interaction_ms").notNull(),
+    deviceClass: text("device_class").notNull(),
+    dpr: real("dpr").notNull(),
+    viewportW: integer("viewport_w").notNull(),
+    viewportH: integer("viewport_h").notNull(),
+    cores: integer("cores"),
+    memoryGb: real("memory_gb"),
+    gpu: text("gpu"),
+    userAgent: text("user_agent").notNull(),
+    createdAt: createdAt(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("fps_samples_event_created_idx").on(t.eventId, t.createdAt)],
+);
+
 export type Venue = typeof venues.$inferSelect;
 export type NewVenue = typeof venues.$inferInsert;
 export type Template = typeof templates.$inferSelect;
@@ -208,3 +240,5 @@ export type Order = typeof orders.$inferSelect;
 export type NewOrder = typeof orders.$inferInsert;
 export type OrderItem = typeof orderItems.$inferSelect;
 export type NewOrderItem = typeof orderItems.$inferInsert;
+export type FpsSample = typeof fpsSamples.$inferSelect;
+export type NewFpsSample = typeof fpsSamples.$inferInsert;
