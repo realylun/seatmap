@@ -123,7 +123,12 @@ describe("seedDatabase trên PGlite", () => {
         expectedSeats,
         4,
       ]);
-      expect(uploads.at(-1)).toMatch(/^geometry\/.+\/v1\.json$/);
+      // mỗi version: file đầy đủ + overview (tải theo tầng) + chunk ghế theo section; seed 2 lần
+      const geometryFiles = uploads.filter((p) => p.endsWith("/v1.json"));
+      const overviews = uploads.filter((p) =>
+        /\/v1-[\w-]{8}\/overview\.json$/.test(p),
+      );
+      expect([geometryFiles.length, overviews.length]).toEqual([8, 8]);
 
       const rows = await db.select().from(events);
       expect(rows.every((e) => e.status === "on_sale" && e.imageUrl)).toBe(

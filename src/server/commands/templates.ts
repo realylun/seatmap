@@ -13,6 +13,7 @@ import {
   type Venue,
 } from "@/domain/venue/types";
 import type { PutJson } from "../blob";
+import { IMMUTABLE, uploadSplitGeometry, versionDir } from "./geometry-split";
 import { localBlobUrlSchema } from "./image-url";
 import type { Db } from "../inventory/db";
 import { invalid, type CommandResult } from "./venues";
@@ -101,14 +102,28 @@ export async function publishVersion(
     .limit(1);
   const version = (latest?.version ?? 0) + 1;
 
+  const geometry = withSeatSpacing(venue.data);
   const { url } = await putJson(
     `geometry/${templateId}/v${version}.json`,
-    serializeGeometry(withSeatSpacing(venue.data)),
+    serializeGeometry(geometry),
+    IMMUTABLE,
+  );
+  const overviewUrl = await uploadSplitGeometry(
+    putJson,
+    versionDir(templateId, version),
+    geometry,
   );
   const sectionCount = venue.data.sections.length;
   const [row] = await db
     .insert(templateVersions)
-    .values({ templateId, version, geometryUrl: url, sectionCount, seatCount })
+    .values({
+      templateId,
+      version,
+      geometryUrl: url,
+      overviewUrl,
+      sectionCount,
+      seatCount,
+    })
     .returning({ id: templateVersions.id });
   return { ok: true, value: { id: row.id, version, seatCount, sectionCount } };
 }

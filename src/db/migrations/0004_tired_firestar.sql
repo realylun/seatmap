@@ -1,0 +1,1 @@
+ALTER TABLE "template_versions" ADD COLUMN "overview_url" text;
