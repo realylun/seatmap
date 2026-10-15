@@ -215,10 +215,16 @@ export default function SeatMap(props: SeatMapProps) {
   );
 
   const pinnedSections = useMemo(
-    () => [hoveredSection, selectedSection, flyRequest?.section ?? null],
-    [hoveredSection, selectedSection, flyRequest],
+    () => [selectedSection, flyRequest?.section ?? null],
+    [selectedSection, flyRequest],
   );
-  useSectionSeats(map, venue, props.overviewUrl, pinnedSections);
+  useSectionSeats(
+    map,
+    venue,
+    props.overviewUrl,
+    pinnedSections,
+    hoveredSection,
+  );
 
   const is3d = useTiltMode(map);
   useUprightLabels(map, venue);

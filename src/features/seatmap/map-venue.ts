@@ -197,12 +197,24 @@ export function parseMapVenue(json: unknown): MapVenue {
   return toMapVenue(parsed.data);
 }
 
+/** Row theo section, 1 lượt (Map.groupBy cần Safari 17.4+) */
+function groupRows(rows: readonly RowFeature[]): Map<string, RowFeature[]> {
+  const groups = new Map<string, RowFeature[]>();
+  for (const r of rows) {
+    const group = groups.get(r.properties.section);
+    if (group) group.push(r);
+    else groups.set(r.properties.section, [r]);
+  }
+  return groups;
+}
+
 /** overview.json → MapVenue chưa có ghế; mỗi section mang đường dẫn chunk ghế của nó */
 export function parseOverview(json: unknown): MapVenue {
   const parsed = venueOverviewSchema.safeParse(json);
   if (!parsed.success) throw new Error("Seat map overview is invalid");
   const overview = parsed.data;
   const rows = overview.rows.features;
+  const rowsBySection = groupRows(rows);
   return buildMapVenue({
     bounds: overview.bounds,
     seatSpacing: overview.seatSpacing,
@@ -214,7 +226,7 @@ export function parseOverview(json: unknown): MapVenue {
         geometry: { type: "Polygon", coordinates: s.polygon },
       },
       center: s.center,
-      rows: rows.filter((r) => r.properties.section === s.id),
+      rows: rowsBySection.get(s.id) ?? [],
       chunk: s.chunk,
     })),
     rows,

@@ -1,5 +1,5 @@
 // Nối seat-loader với vòng đời map: tải lại theo khung nhìn mỗi khi camera dừng, và ngay khi section
-// ghim (hover / chọn / bay tới) đổi. Không có overviewUrl (version cũ) → không làm gì, ghế đã có sẵn.
+// ghim (chọn / bay tới) hoặc section đang hover đổi. Không có overviewUrl (version cũ) → không làm gì, ghế đã có sẵn.
 import type { Map as MapLibreMap } from "maplibre-gl";
 import { useEffect, useEffectEvent, useRef } from "react";
 import type { MapVenue } from "./map-venue";
@@ -13,11 +13,12 @@ export function useSectionSeats(
   venue: MapVenue | null,
   overviewUrl: string | null,
   pinned: readonly (string | null)[],
+  hovered: string | null,
 ) {
   const loader = useRef<SeatLoader | null>(null);
   // listener moveend luôn đọc pinned mới nhất mà không phải tạo lại loader
   const refresh = useEffectEvent((current: SeatLoader) => {
-    current.update(pinned);
+    current.update(pinned, hovered);
   });
 
   useEffect(() => {
@@ -35,6 +36,6 @@ export function useSectionSeats(
   }, [map, venue, overviewUrl]);
 
   useEffect(() => {
-    loader.current?.update(pinned);
-  }, [pinned]);
+    loader.current?.update(pinned, hovered);
+  }, [pinned, hovered]);
 }

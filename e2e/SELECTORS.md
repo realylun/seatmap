@@ -6,6 +6,7 @@ Admin specs use labels/roles on `src/app/admin/**`. Public pages must expose:
 | --------------------------- | -------------------- | -------------------------------------------------------------------------------------------- |
 | `event-card`                | home (`/`), search   | `<a>` to `/events/[slug]`; every event card (trending + city)                                |
 | `seat-map`                  | event detail         | the map container                                                                            |
+| `[data-seat-sections]`      | inside `seat-map`    | progressive loading only: number of sections whose seats are in the map (0 at whole-venue view) |
 | `fps-overlay`               | event detail         | FPS badge inside the map, text `NN fps · NN.N ms`; `data-level` = good / ok / poor / pending |
 | `qty-chip-{n}`              | event detail filters | n = 1..8, click selects ticket quantity                                                      |
 | `listing-card`              | event detail listing | one per listing; clicking auto-selects `n` (qty, default 1) contiguous cheapest seats        |
