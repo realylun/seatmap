@@ -140,14 +140,18 @@ export function EventExplorer({
     [canBuy, seatBySid],
   );
 
-  const onPick = (listing: Listing) => {
-    flyTo(listing.section);
-    if (!canBuy) return;
-    const sids = pickSeats(listing, filters.quantity);
-    if (!sids) return;
-    setHoldError(null);
-    dispatch({ type: "replace", sids });
-  };
+  const { quantity } = filters;
+  const onPick = useCallback(
+    (listing: Listing) => {
+      flyTo(listing.section);
+      if (!canBuy) return;
+      const sids = pickSeats(listing, quantity);
+      if (!sids) return;
+      setHoldError(null);
+      dispatch({ type: "replace", sids });
+    },
+    [flyTo, canBuy, quantity],
+  );
 
   const onHold = () => {
     setHoldError(null);

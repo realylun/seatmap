@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useDeferredValue, useEffect, useState } from "react";
 import type { Listing, ListingSort } from "@/domain/seats/listings";
 import type { Tier } from "@/features/seatmap/availability";
 import { ListingCard } from "./ListingCard";
@@ -78,6 +78,9 @@ function useRenderCount(total: number, resetKey: string) {
 }
 
 export function ListingPanel(props: Props) {
+  // Hover section trên map đổi nhiều thẻ cùng lúc (mọi listing của section đó): render ở mức ưu tiên
+  // thấp, ngắt được, để không chặn frame của map khi rê chuột
+  const hoveredSection = useDeferredValue(props.hoveredSection);
   const tierById = new Map(props.tiers.map((t) => [t.id, t]));
   const resetKey = [
     props.quantity,
@@ -137,7 +140,7 @@ export function ListingPanel(props: Props) {
                 quantity={props.quantity}
                 tierName={tier?.name ?? ""}
                 tierColor={tier?.color ?? "#888888"}
-                hovered={props.hoveredSection === l.section}
+                hovered={hoveredSection === l.section}
                 onHover={props.onHover}
                 onPick={props.onPick}
               />
