@@ -97,6 +97,7 @@ async function EventContent({
       <EventExplorer
         eventId={event.id}
         geometryUrl={event.geometryUrl}
+        overviewUrl={event.overviewUrl}
         canBuy={event.status === "on_sale"}
         viewed={{
           slug: event.slug,

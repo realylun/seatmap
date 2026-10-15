@@ -25,6 +25,7 @@ export type EventDetail = {
   venueName: string;
   city: string;
   geometryUrl: string;
+  overviewUrl: string | null;
 };
 
 /** Thông tin tĩnh của event (không gồm trạng thái ghế). Tag `event:<id>` khớp admin updateTag. */
@@ -45,6 +46,7 @@ export async function getEventBySlug(
       venueName: venues.name,
       city: venues.city,
       geometryUrl: templateVersions.geometryUrl,
+      overviewUrl: templateVersions.overviewUrl,
     })
     .from(events)
     .innerJoin(venues, eq(venues.id, events.venueId))

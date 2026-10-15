@@ -20,12 +20,18 @@ import {
   type StateMap,
 } from "./feature-states";
 import { labelFeatures } from "./labels";
-import { parseMapVenue, type MapSection, type MapVenue } from "./map-venue";
+import {
+  parseMapVenue,
+  parseOverview,
+  type MapSection,
+  type MapVenue,
+} from "./map-venue";
 import { rowMarkers, sectionMarkers, sectionShape } from "./markers";
 import { configureMapLibreWorker } from "./maplibre-worker";
 import { FpsOverlay } from "./fps/FpsOverlay";
 import { addPillImages } from "./pills";
 import { SeatCountBadge } from "./SeatCountBadge";
+import { useSectionSeats } from "./use-section-seats";
 
 configureMapLibreWorker();
 
@@ -43,6 +49,8 @@ export type FlyRequest = { readonly section: string; readonly key: number };
 export type SeatMapProps = {
   eventId: string;
   geometryUrl: string;
+  /** Tải theo tầng (overview trước, ghế theo section); null = version cũ, tải cả geometryUrl */
+  overviewUrl: string | null;
   availability: DecodedAvailability | null;
   listings: readonly Listing[];
   selection: readonly string[];
@@ -54,28 +62,27 @@ export type SeatMapProps = {
   onSeatClick: (sid: string) => void;
 };
 
-function useMapVenue(geometryUrl: string) {
+function useMapVenue(geometryUrl: string, overviewUrl: string | null) {
   const [state, setState] = useState<{
     venue: MapVenue | null;
     error: string | null;
   }>({ venue: null, error: null });
   useEffect(() => {
     const controller = new AbortController();
-    fetch(geometryUrl, { signal: controller.signal })
+    const parse = overviewUrl ? parseOverview : parseMapVenue;
+    fetch(overviewUrl ?? geometryUrl, { signal: controller.signal })
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
       })
-      .then((json: unknown) =>
-        setState({ venue: parseMapVenue(json), error: null }),
-      )
+      .then((json: unknown) => setState({ venue: parse(json), error: null }))
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
         console.error("seat map geometry failed", error);
         setState({ venue: null, error: "Could not load the seat map." });
       });
     return () => controller.abort();
-  }, [geometryUrl]);
+  }, [geometryUrl, overviewUrl]);
   return state;
 }
 
@@ -136,7 +143,7 @@ function useMapData(
 }
 
 export default function SeatMap(props: SeatMapProps) {
-  const { venue, error } = useMapVenue(props.geometryUrl);
+  const { venue, error } = useMapVenue(props.geometryUrl, props.overviewUrl);
   const mapRef = useRef<MapRef>(null);
   const [map, setMap] = useState<MapLibreMap | null>(null);
   const [cursor, setCursor] = useState("");
@@ -206,6 +213,12 @@ export default function SeatMap(props: SeatMapProps) {
     () => (availability ? seatCounts(availability.seats) : null),
     [availability],
   );
+
+  const pinnedSections = useMemo(
+    () => [hoveredSection, selectedSection, flyRequest?.section ?? null],
+    [hoveredSection, selectedSection, flyRequest],
+  );
+  useSectionSeats(map, venue, props.overviewUrl, pinnedSections);
 
   const is3d = useTiltMode(map);
   useUprightLabels(map, venue);
