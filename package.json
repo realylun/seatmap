@@ -20,6 +20,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "dotenv -e .env.local -- drizzle-kit migrate",
     "db:seed": "dotenv -e .env.local -- tsx src/db/seed.ts",
+    "db:simulate-sales": "dotenv -e .env.local -- tsx src/db/simulate-sales.ts",
     "test:neon": "dotenv -e .env.local -- vitest run contention.neon"
   },
   "dependencies": {
