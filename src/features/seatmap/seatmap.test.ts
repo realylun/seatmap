@@ -15,7 +15,9 @@ import { boundsCenter, ringBounds } from "./camera";
 import {
   diffStates,
   rowStates,
+  seatColors,
   seatStates,
+  takenSeatStates,
   sectionStates,
 } from "./feature-states";
 import { labelFeatures, labelFitZoom, labelRotation } from "./labels";
@@ -362,6 +364,37 @@ describe("markers and feature states", () => {
     expect(diff.set.map(([id]) => id)).toEqual(["101|A|1", "101|A|3"]);
     expect(diff.remove).toEqual(["101|A|2"]);
     expect(diffStates(next, next)).toEqual({ set: [], remove: [] });
+  });
+  it("keeps only non-available seats in the sparse seat state", () => {
+    const d = decode(
+      {
+        tiers,
+        groups: [[0, ["101|A|1", "101|A|2", "101|A|3"]]],
+      },
+      { seats: [["101|A|2", 2]] },
+    );
+    expect([...takenSeatStates(d.seats)]).toEqual([
+      ["101|A|2", { color: null, status: 2 }],
+    ]);
+  });
+
+  it("maps seat tier colours once per layout", () => {
+    const layout = {
+      tiers,
+      groups: [
+        [0, ["101|A|1"]],
+        [-1, ["101|A|2"]],
+      ] as [number, string[]][],
+    };
+    const first = decode(layout, { seats: [] });
+    const colors = seatColors(first);
+    expect([...colors]).toEqual([["101|A|1", "#E4572E"]]);
+    // poll mới giữ nguyên `tiers` của layout → cùng Map, không phải đẩy update xuống source
+    expect(seatColors({ tiers: first.tiers, tierBySid: new Map() })).toBe(
+      colors,
+    );
+    // layout tải lại (parse mới) → Map mới
+    expect(seatColors(decode(layout, { seats: [] }))).not.toBe(colors);
   });
 });
 

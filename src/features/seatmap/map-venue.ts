@@ -138,7 +138,11 @@ function sectionsCenter(sections: readonly MapSection[]): Point | null {
 
 /** Ghế kèm `sid` (promoteId) — đúng kiểu GeoJSON Point để đưa thẳng vào updateData */
 export type MapSeat = SeatFeature & {
-  readonly properties: SeatFeature["properties"] & { readonly sid: string };
+  readonly properties: SeatFeature["properties"] & {
+    readonly sid: string;
+    /** Màu tier, seat-loader gắn lúc thêm vào source */
+    readonly color?: string;
+  };
 };
 
 const withSid = (f: SeatFeature): MapSeat => ({

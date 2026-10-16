@@ -15,6 +15,8 @@ export function useSectionSeats(
   pinned: readonly (string | null)[],
   hovered: string | null,
   onSeatsAdded: (seats: readonly MapSeat[]) => void,
+  /** sid → màu tier; null = chưa có availability */
+  colors: ReadonlyMap<string, string> | null,
 ) {
   const loader = useRef<SeatLoader | null>(null);
   // listener moveend luôn đọc pinned mới nhất mà không phải tạo lại loader
@@ -22,6 +24,9 @@ export function useSectionSeats(
     current.update(pinned, hovered);
   });
   const seatsAdded = useEffectEvent(onSeatsAdded);
+  const applyColors = useEffectEvent((current: SeatLoader) => {
+    if (colors) current.setColors(colors);
+  });
 
   useEffect(() => {
     if (!map || !venue || !overviewUrl) return NOTHING_TO_CLEAN;
@@ -29,6 +34,7 @@ export function useSectionSeats(
       seatsAdded(seats),
     );
     loader.current = current;
+    applyColors(current);
     const onMoveEnd = () => refresh(current);
     map.on("moveend", onMoveEnd);
     onMoveEnd();
@@ -42,4 +48,8 @@ export function useSectionSeats(
   useEffect(() => {
     loader.current?.update(pinned, hovered);
   }, [pinned, hovered]);
+
+  useEffect(() => {
+    if (loader.current && colors) loader.current.setColors(colors);
+  }, [colors]);
 }

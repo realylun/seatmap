@@ -1,6 +1,7 @@
 // Tải chunk ghế theo section và thêm vào source "seats" bằng updateData (không setData cả venue).
 // Chọn section ở section-loader.ts (thuần). Feature-state theo sid (trạng thái, đang chọn) lưu ở cấp
-// source nên áp được cả trước khi ghế tới.
+// source nên áp được cả trước khi ghế tới; màu tier là property `color` gắn lúc thêm ghế.
+// Camera đang bay thì giữ chunk lại: updateData làm reload tile ghế, đẩy vào giữa animation sẽ tụt frame.
 import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
 import { ringBounds } from "./camera";
 import { chunkUrl, parseChunk, type MapSeat, type MapVenue } from "./map-venue";
@@ -18,6 +19,8 @@ export type SeatLoader = {
     pinned: readonly (string | null)[],
     hovered: string | null,
   ) => void;
+  /** sid → màu tier; ghế đã trong source được cập nhật phần chênh, ghế tới sau gắn sẵn */
+  readonly setColors: (colors: ReadonlyMap<string, string>) => void;
   readonly dispose: () => void;
 };
 
@@ -80,6 +83,11 @@ export function createSeatLoader(
   let queue: readonly string[] = [];
   let arrived: readonly Arrived[] = [];
   let frame = 0;
+  /** Đang chờ moveend để thêm đợt ghế */
+  let held = false;
+  let colors: ReadonlyMap<string, string> = new Map();
+  /** sid đã vào source → màu đang gắn (null = chưa gán tier) */
+  const applied = new Map<string, string | null>();
   let last: { pinned: readonly (string | null)[]; hovered: string | null } = {
     pinned: [],
     hovered: null,
@@ -98,9 +106,37 @@ export function createSeatLoader(
     .catch((error: unknown) => console.error("seat reset failed", { error }));
   report();
 
+  const withColor = (seat: MapSeat): MapSeat => {
+    const color = colors.get(seat.properties.sid);
+    return color
+      ? { ...seat, properties: { ...seat.properties, color } }
+      : seat;
+  };
+
+  const onSettled = () => {
+    held = false;
+    schedule();
+  };
+
+  /** Thêm đợt ghế ở frame kế; camera đang bay thì đợi moveend */
+  function schedule() {
+    if (frame || held || arrived.length === 0 || signal.aborted) return;
+    if (map.isMoving()) {
+      held = true;
+      map.once("moveend", onSettled);
+      return;
+    }
+    frame = requestAnimationFrame(flush);
+  }
+
   // Gom các chunk về trong cùng 1 frame thành 1 lần updateData; chỉ đánh dấu loaded khi đã vào source
-  const flush = () => {
+  function flush() {
     frame = 0;
+    // camera bắt đầu chạy sau khi frame đã hẹn
+    if (map.isMoving()) {
+      schedule();
+      return;
+    }
     const batch = arrived;
     arrived = [];
     const ids = batch.map((a) => a.id);
@@ -109,7 +145,10 @@ export function createSeatLoader(
       for (const id of ids) waiting.delete(id); // source mất (đổi style): lần update sau tải lại
       return;
     }
-    const seats = batch.flatMap((a) => a.seats);
+    const seats = batch.flatMap((a) => a.seats).map(withColor);
+    // ghi ngay (không đợi worker) để setColors gọi xen giữa vẫn so đúng màu của đợt này
+    for (const seat of seats)
+      applied.set(seat.properties.sid, colors.get(seat.properties.sid) ?? null);
     source
       .updateData({ add: seats })
       .then(
@@ -129,7 +168,28 @@ export function createSeatLoader(
         for (const id of ids) waiting.delete(id);
         report();
       });
-  };
+  }
+
+  function setColors(next: ReadonlyMap<string, string>) {
+    colors = next;
+    const changed = [...applied].filter(
+      ([sid, color]) => (next.get(sid) ?? null) !== color,
+    );
+    const source = signal.aborted ? undefined : seatsSource();
+    if (changed.length === 0 || !source) return;
+    const diffs = changed.map(([sid]) => {
+      const color = next.get(sid);
+      applied.set(sid, color ?? null);
+      return color
+        ? { id: sid, addOrUpdateProperties: [{ key: "color", value: color }] }
+        : { id: sid, removeProperties: ["color"] };
+    });
+    source
+      .updateData({ update: diffs })
+      .catch((error: unknown) =>
+        console.error("seat recolor failed", { error }),
+      );
+  }
 
   function scheduleRetry(delay: number) {
     const timer = setTimeout(() => {
@@ -158,7 +218,7 @@ export function createSeatLoader(
       if (signal.aborted) return;
       waiting.add(id);
       arrived = [...arrived, { id, seats }];
-      frame ||= requestAnimationFrame(flush);
+      schedule();
     } catch (error) {
       if (!signal.aborted) recordFailure(id, error);
     } finally {
@@ -194,9 +254,11 @@ export function createSeatLoader(
 
   return {
     update,
+    setColors,
     dispose() {
       controller.abort();
       if (frame) cancelAnimationFrame(frame);
+      map.off("moveend", onSettled);
       for (const timer of timers) clearTimeout(timer);
       delete container.dataset.seatSections;
     },
