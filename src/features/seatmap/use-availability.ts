@@ -37,7 +37,13 @@ export function useAvailability(eventId: string) {
       createAvailabilityLoader({
         eventId,
         fetchJson,
-        onData: (data) => setState({ eventId, data, error: null }),
+        // poll không đổi trả lại đúng object cũ → giữ state, không render lại
+        onData: (data) =>
+          setState((s) =>
+            s.eventId === eventId && s.data === data && s.error === null
+              ? s
+              : { eventId, data, error: null },
+          ),
         onError: (error) => {
           console.error("availability fetch failed", error);
           setState((s) => ({

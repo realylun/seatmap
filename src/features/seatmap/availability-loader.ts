@@ -4,6 +4,7 @@ import {
   parseStatus,
   type DecodedAvailability,
   type LayoutPayload,
+  type StatusPayload,
 } from "./availability";
 
 /** Layout cũ hơn mức này được tải lại (URL thường, CDN cache được) ở lần refresh kế tiếp */
@@ -18,6 +19,12 @@ type Options = {
   readonly onError: (error: unknown) => void;
   readonly now?: () => number;
 };
+
+const sameStatus = (a: StatusPayload, b: StatusPayload) =>
+  a.seats.length === b.seats.length &&
+  a.seats.every(
+    ([sid, code], i) => b.seats[i][0] === sid && b.seats[i][1] === code,
+  );
 
 /** "fresh" = bỏ qua CDN (admin vừa sửa tier); "cdn" = tải lại qua URL cache được */
 type LayoutReload = "none" | "cdn" | "fresh";
@@ -37,6 +44,12 @@ export function createAvailabilityLoader({
   let layout: { payload: LayoutPayload; loadedAt: number } | null = null;
   let reload: LayoutReload = "none";
   let controller: AbortController | null = null;
+  /** Kết quả lần trước: status + layout không đổi thì trả lại đúng object này (memo phía sau giữ nguyên) */
+  let last: {
+    layout: LayoutPayload;
+    status: StatusPayload;
+    data: DecodedAvailability;
+  } | null = null;
 
   const markLayoutStale = (mode: "cdn" | "fresh" = "cdn") => {
     if (reload !== "fresh") reload = mode;
@@ -76,7 +89,15 @@ export function createAvailabilityLoader({
         // chỉ xoá cờ nếu không có yêu cầu reload mới hơn trong lúc tải
         if (reload === loaded.reloaded) reload = "none";
       }
-      onData(mergeAvailability(loaded.payload, status));
+      const unchanged =
+        last?.layout === loaded.payload && sameStatus(last.status, status);
+      if (!unchanged || !last)
+        last = {
+          layout: loaded.payload,
+          status,
+          data: mergeAvailability(loaded.payload, status),
+        };
+      onData(last.data);
     } catch (error) {
       if (current.signal.aborted) return;
       onError(error);

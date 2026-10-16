@@ -10,7 +10,8 @@ import {
   useTransition,
 } from "react";
 import {
-  buildListings,
+  createListingGrouper,
+  listingsFromGroups,
   pickSeats,
   type Listing,
   type ListingSort,
@@ -58,10 +59,15 @@ function useListingState(eventId: string) {
   const [tierIds, setTierIds] = useState(NO_TIERS);
   const [selectedSection, setSelectedSection] = useState<string | null>(null);
   const { data } = availability;
+  const [grouper] = useState(createListingGrouper);
+  const groups = useMemo(
+    () => (data ? grouper.groupsFor(data.seats) : null),
+    [grouper, data],
+  );
 
   const listings = useMemo(
-    () => (data ? buildListings(data.seats, { quantity, sort }) : []),
-    [data, quantity, sort],
+    () => (groups ? listingsFromGroups(groups, { quantity, sort }) : []),
+    [groups, quantity, sort],
   );
   const mapListings = useMemo(
     () => filterListings(listings, { tierIds, section: null }),

@@ -54,11 +54,12 @@ function setup(now = () => 0) {
   const run = async (
     p: Promise<void>,
     layout: unknown = layoutA,
+    seats: unknown = status,
   ): Promise<void> => {
     await settle();
     const pending = f.calls.filter((c) => !c.signal.aborted);
     for (const c of pending)
-      f.respond((u) => u === c.url, isLayout(c.url) ? layout : status);
+      f.respond((u) => u === c.url, isLayout(c.url) ? layout : seats);
     await p;
   };
   return { ...f, loader, onData, onError, run, settle };
@@ -76,6 +77,27 @@ describe("createAvailabilityLoader", () => {
     expect(urls(t.calls)).toEqual([`/api/events/${EVENT}/availability`]);
     await t.run(p);
     expect(t.onData).toHaveBeenCalledTimes(2);
+  });
+
+  it("hands back the same data when the status did not change", async () => {
+    const t = setup();
+    const sold = { seats: [["A|1|1", 2]] };
+    await t.run(t.loader.refresh(), layoutA, sold);
+    await t.run(t.loader.refresh(), layoutA, { seats: [["A|1|1", 2]] });
+    const [[first], [second]] = t.onData.mock.calls;
+    expect(second).toBe(first);
+    await t.run(t.loader.refresh(), layoutA, { seats: [["A|1|1", 1]] });
+    expect(t.onData.mock.calls[2][0]).not.toBe(first);
+  });
+
+  it("a reloaded layout always produces new data", async () => {
+    const t = setup();
+    await t.run(t.loader.refresh());
+    t.loader.markLayoutStale();
+    await t.run(t.loader.refresh(), layoutB);
+    const [[first], [second]] = t.onData.mock.calls;
+    expect(second).not.toBe(first);
+    expect(second.tierBySid.size).toBe(0);
   });
 
   it("refresh(true) busts only the status cache", async () => {
