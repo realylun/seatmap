@@ -49,6 +49,9 @@ type SellableSeat = {
 
 type Group = Omit<Listing, "isCheapest" | "isCheapestInSection">;
 
+/** Group listing (chưa lọc quantity, chưa gắn cờ) theo section */
+export type ListingGroups = ReadonlyMap<string, readonly Group[]>;
+
 // Collator dùng chung: localeCompare kèm options dựng collator mới mỗi lần gọi — chậm ~20× khi
 // sắp hàng trăm nghìn ghế (sân 135k chỗ)
 const collator = new Intl.Collator("en", { numeric: true });
@@ -107,7 +110,9 @@ function compareGroups(sort: ListingSort) {
     direction * (a.price - b.price) ||
     natural(a.section, b.section) ||
     natural(a.row, b.row) ||
-    natural(a.tierId, b.tierId);
+    natural(a.tierId, b.tierId) ||
+    // collator numeric coi "1" và "01" là bằng nhau → chốt bằng id để thứ tự không phụ thuộc input
+    (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 }
 
 function withFlags(groups: readonly Group[]): Listing[] {
@@ -136,16 +141,85 @@ function minBy(
   return result;
 }
 
+function groupBySection(seats: readonly SeatAvailability[]): ListingGroups {
+  return Map.groupBy(groupSeats(toSellable(seats)), (g) => g.section);
+}
+
 /** Listing đã lọc theo quantity, sắp theo giá; cờ cheapest tính trên tập sau khi lọc */
+export function listingsFromGroups(
+  groups: ListingGroups,
+  query: ListingQuery = {},
+): Listing[] {
+  const { quantity = 1, sort = "price-asc" } = query;
+  const kept = [...groups.values()]
+    .flat()
+    .filter((g) => g.maxRun >= quantity)
+    .toSorted(compareGroups(sort));
+  return withFlags(kept);
+}
+
 export function buildListings(
   seats: readonly SeatAvailability[],
   query: ListingQuery = {},
 ): Listing[] {
-  const { quantity = 1, sort = "price-asc" } = query;
-  const groups = groupSeats(toSellable(seats))
-    .filter((g) => g.maxRun >= quantity)
-    .toSorted(compareGroups(sort));
-  return withFlags(groups);
+  return listingsFromGroups(groupBySection(seats), query);
+}
+
+/** Section của sid "section|row|seat" — rẻ hơn decodeSid, dùng khi quét cả venue */
+const sectionOfSid = (sid: string) => sid.slice(0, sid.indexOf("|"));
+
+const sameSeat = (a: SeatAvailability, b: SeatAvailability) =>
+  a.status === b.status && a.tierId === b.tierId && a.price === b.price;
+
+/** Section có ghế đổi trạng thái/giá; null nếu danh sách ghế khác hẳn (layout mới) */
+function changedSections(
+  prev: readonly SeatAvailability[],
+  next: readonly SeatAvailability[],
+): ReadonlySet<string> | null {
+  if (prev.length !== next.length) return null;
+  const changed = new Set<string>();
+  // vòng index: quét ~135k ghế mỗi poll, tránh cấp phát [i, seat] cho từng ghế
+  for (let i = 0; i < next.length; i++) {
+    if (next[i].sid !== prev[i].sid) return null;
+    if (!sameSeat(next[i], prev[i])) changed.add(sectionOfSid(next[i].sid));
+  }
+  return changed;
+}
+
+function regroup(
+  prevSeats: readonly SeatAvailability[],
+  prevGroups: ListingGroups,
+  seats: readonly SeatAvailability[],
+): ListingGroups {
+  const sections = changedSections(prevSeats, seats);
+  if (!sections) return groupBySection(seats);
+  if (sections.size === 0) return prevGroups;
+  const fresh = groupBySection(
+    seats.filter((s) => sections.has(sectionOfSid(s.sid))),
+  );
+  const kept = [...prevGroups].filter(([section]) => !sections.has(section));
+  return new Map([...kept, ...fresh]);
+}
+
+/**
+ * Group listing tăng dần theo lần poll: chỉ group lại section có ghế đổi. Dựng cả venue (~135k ghế)
+ * mỗi 15s chặn main thread ~300ms trên điện thoại.
+ */
+export function createListingGrouper() {
+  let last: {
+    readonly seats: readonly SeatAvailability[];
+    readonly groups: ListingGroups;
+  } | null = null;
+  return {
+    groupsFor(seats: readonly SeatAvailability[]): ListingGroups {
+      if (last?.seats === seats) return last.groups;
+      const groups = last
+        ? regroup(last.seats, last.groups, seats)
+        : groupBySection(seats);
+      last = { seats, groups };
+      return groups;
+    },
+  };
 }
 
 /** Giá rẻ nhất theo section → price pin ở zoom section */

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   buildListings,
+  createListingGrouper,
+  listingsFromGroups,
   pickSeats,
   rowMinPrice,
   sectionMinPrice,
@@ -138,5 +140,58 @@ describe("pickSeats", () => {
   });
   it("không đủ ghế liền nhau → null", () => {
     expect(pickSeats(rowA, 4)).toBeNull();
+  });
+});
+
+const withStatus = (sid: string, status: SeatStatus) =>
+  seats.map((s) => (s.sid === sid ? { ...s, status } : s));
+
+describe("createListingGrouper", () => {
+  it("matches buildListings for the full venue", () => {
+    const groups = createListingGrouper().groupsFor(seats);
+    expect(listingsFromGroups(groups, { quantity: 2 })).toEqual(
+      buildListings(seats, { quantity: 2 }),
+    );
+  });
+
+  it("returns the same groups for the same seats array", () => {
+    const grouper = createListingGrouper();
+    expect(grouper.groupsFor(seats)).toBe(grouper.groupsFor(seats));
+  });
+
+  it("regroups only sections whose seats changed", () => {
+    const grouper = createListingGrouper();
+    const before = grouper.groupsFor(seats);
+    const next = withStatus("101|A|2", "sold");
+    const after = grouper.groupsFor(next);
+    // section 102 không đổi → giữ nguyên mảng group cũ
+    expect(after.get("102")).toBe(before.get("102"));
+    expect(after.get("101")).not.toBe(before.get("101"));
+    expect(listingsFromGroups(after)).toEqual(buildListings(next));
+  });
+
+  it("drops a section that has nothing left to sell", () => {
+    const grouper = createListingGrouper();
+    grouper.groupsFor(seats);
+    const next = withStatus("102|A|1", "sold");
+    expect(grouper.groupsFor(next).has("102")).toBe(false);
+    expect(listingsFromGroups(grouper.groupsFor(next))).toEqual(
+      buildListings(next),
+    );
+  });
+
+  it("rebuilds everything when the seat list itself changes (new layout)", () => {
+    const grouper = createListingGrouper();
+    grouper.groupsFor(seats);
+    const next = [...seats, seat("103|A|1", "std", 500_000)];
+    expect(listingsFromGroups(grouper.groupsFor(next))).toEqual(
+      buildListings(next),
+    );
+  });
+
+  it("an unchanged copy of the seats keeps the previous groups", () => {
+    const grouper = createListingGrouper();
+    const before = grouper.groupsFor(seats);
+    expect(grouper.groupsFor(seats.map((s) => ({ ...s })))).toBe(before);
   });
 });
