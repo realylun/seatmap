@@ -42,7 +42,15 @@ const chunkJson = new Map(
   ]),
 );
 
-type Diff = { add?: { properties: { sid: string } }[]; removeAll?: boolean };
+type Diff = {
+  add?: { properties: { sid: string; color?: string } }[];
+  removeAll?: boolean;
+  update?: {
+    id: string;
+    addOrUpdateProperties?: { key: string; value: unknown }[];
+    removeProperties?: string[];
+  }[];
+};
 
 function fakeMap({ zoom = 6, hasSource = true } = {}) {
   const updates: Diff[] = [];
@@ -52,11 +60,18 @@ function fakeMap({ zoom = 6, hasSource = true } = {}) {
     }),
   };
   const container = { dataset: {} as Record<string, string> };
-  const state = { hasSource };
+  const state = { hasSource, moving: false };
+  const listeners = new Map<string, Set<() => void>>();
   const map = {
     getZoom: () => zoom,
     getPitch: () => 0,
-    isMoving: () => false,
+    isMoving: () => state.moving,
+    once: (type: string, fn: () => void) => {
+      const set = listeners.get(type) ?? new Set();
+      set.add(fn);
+      listeners.set(type, set);
+    },
+    off: (type: string, fn: () => void) => listeners.get(type)?.delete(fn),
     getCenter: () => ({ lng: 10, lat: 0.5 }),
     getBounds: () => ({
       getWest: () => -1,
@@ -74,6 +89,14 @@ function fakeMap({ zoom = 6, hasSource = true } = {}) {
     updates,
     container,
     state,
+    /** Camera dừng: bắn moveend cho các listener `once` */
+    stop: () => {
+      state.moving = false;
+      const fns = [...(listeners.get("moveend") ?? [])];
+      listeners.delete("moveend");
+      fns.forEach((fn) => fn());
+    },
+    listenerCount: () => listeners.get("moveend")?.size ?? 0,
     addedSids: () =>
       updates.flatMap((u) => (u.add ?? []).map((f) => f.properties.sid)),
   };
@@ -148,6 +171,96 @@ describe("createSeatLoader", () => {
     // removeAll + ít lần add hơn số chunk (gộp theo frame)
     expect(updates.length - 1).toBeLessThan(10);
     expect(container.dataset.seatSections).toBe("10");
+  });
+
+  it("holds arrived chunks while the camera moves, adds them once it stops", async () => {
+    const { map, addedSids, state, stop, container } = fakeMap();
+    state.moving = true;
+    const loader = createSeatLoader(map, mapVenue, OVERVIEW_URL);
+    loader.update(["S0"], null); // section ghim tải ngay cả khi đang bay
+    await settle();
+    expect(fetched).toHaveLength(1);
+    expect(addedSids()).toEqual([]);
+    expect(container.dataset.seatSections).toBe("0");
+    // đang chờ: update lần nữa không tải trùng
+    loader.update(["S0"], null);
+    await settle();
+    expect(fetched).toHaveLength(1);
+    stop();
+    await settle();
+    expect(addedSids()).toHaveLength(2);
+    expect(container.dataset.seatSections).toBe("1");
+  });
+
+  it("re-holds a batch if the camera starts moving before the frame runs", async () => {
+    const frames: (() => void)[] = [];
+    vi.stubGlobal("requestAnimationFrame", (cb: () => void) => frames.push(cb));
+    const { map, addedSids, state, stop } = fakeMap({ zoom: 2 });
+    const loader = createSeatLoader(map, mapVenue, OVERVIEW_URL);
+    loader.update(["S0"], null);
+    await settle();
+    expect(frames).toHaveLength(1);
+    // fetch xong, frame đã hẹn; người dùng bắt đầu kéo trước khi frame chạy
+    state.moving = true;
+    frames.splice(0).forEach((cb) => cb());
+    await settle();
+    expect(addedSids()).toEqual([]);
+    vi.stubGlobal("requestAnimationFrame", (cb: () => void) =>
+      setTimeout(cb, 0),
+    );
+    stop();
+    await settle();
+    expect(addedSids()).toHaveLength(2);
+  });
+
+  it("removes its moveend listener on dispose", async () => {
+    const { map, state, listenerCount } = fakeMap();
+    state.moving = true;
+    const loader = createSeatLoader(map, mapVenue, OVERVIEW_URL);
+    loader.update(["S0"], null);
+    await settle();
+    expect(listenerCount()).toBe(1);
+    loader.dispose();
+    expect(listenerCount()).toBe(0);
+  });
+
+  it("adds seats with their tier colour as a property", async () => {
+    const { map, updates } = fakeMap();
+    const loader = createSeatLoader(map, mapVenue, OVERVIEW_URL);
+    loader.setColors(new Map([["S0|A|1", "#E4572E"]]));
+    loader.update(["S0"], null);
+    await settle();
+    const added = updates.flatMap((u) => u.add ?? []);
+    const bySid = new Map(added.map((f) => [f.properties.sid, f.properties]));
+    expect(bySid.get("S0|A|1")?.color).toBe("#E4572E");
+    expect(bySid.get("S0|A|2")?.color).toBeUndefined();
+  });
+
+  it("recolours already-loaded seats when the colours change", async () => {
+    const { map, updates } = fakeMap();
+    const loader = createSeatLoader(map, mapVenue, OVERVIEW_URL);
+    loader.update(["S0"], null);
+    await settle();
+    updates.length = 0;
+    loader.setColors(new Map([["S0|A|1", "#E4572E"]]));
+    await settle();
+    expect(updates).toEqual([
+      {
+        update: [
+          {
+            id: "S0|A|1",
+            addOrUpdateProperties: [{ key: "color", value: "#E4572E" }],
+          },
+        ],
+      },
+    ]);
+    updates.length = 0;
+    loader.setColors(new Map([["S0|A|1", "#E4572E"]])); // không đổi → không update
+    loader.setColors(new Map());
+    await settle();
+    expect(updates).toEqual([
+      { update: [{ id: "S0|A|1", removeProperties: ["color"] }] },
+    ]);
   });
 
   it("loads nothing at whole-venue zoom", async () => {

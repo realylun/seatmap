@@ -81,6 +81,14 @@ const isTaken: ExpressionSpecification = [
   0,
 ];
 
+/** Màu tier của ghế: property `color` (tải theo chunk) hoặc feature-state (bản dựng cả venue, admin) */
+const seatTier: ExpressionSpecification = [
+  "coalesce",
+  stateColor,
+  ["get", "color"],
+];
+const isSeatListed: ExpressionSpecification = ["!=", seatTier, null];
+
 const seatColor = (
   fallback: string,
   selected: string = COLORS.seatSelected,
@@ -90,7 +98,7 @@ const seatColor = (
   selected,
   isTaken,
   COLORS.seatTaken,
-  ["to-color", ["coalesce", stateColor, fallback]],
+  ["to-color", ["coalesce", seatTier, fallback]],
 ];
 
 /**
@@ -184,7 +192,7 @@ function seatLayers(spacing: number): LayerSpecification[] {
           "case",
           isSelected,
           2.5,
-          ["all", isListed, ["!", isTaken]],
+          ["all", isSeatListed, ["!", isTaken]],
           1.5,
           0,
         ],
@@ -194,7 +202,7 @@ function seatLayers(spacing: number): LayerSpecification[] {
         // ghế có vé: nền nhạt hơn viền một chút
         "circle-opacity": fadeInSeats([
           "case",
-          ["all", isListed, ["!", isSelected], ["!", isTaken]],
+          ["all", isSeatListed, ["!", isSelected], ["!", isTaken]],
           0.72,
           1,
         ]),
@@ -306,7 +314,13 @@ export function buildStyle(
         promoteId: PROMOTE.sections,
       },
       rows: { type: "geojson", data: geojson.rows, promoteId: PROMOTE.rows },
-      seats: { type: "geojson", data: geojson.seats, promoteId: PROMOTE.seats },
+      seats: {
+        type: "geojson",
+        data: geojson.seats,
+        promoteId: PROMOTE.seats,
+        // circle bucket bỏ điểm nằm ngoài tile → buffer chỉ làm updateData reload thêm tile lân cận
+        buffer: 0,
+      },
       ...dynamic,
     },
     layers: [

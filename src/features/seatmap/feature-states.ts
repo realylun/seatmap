@@ -2,7 +2,11 @@
 // (diff) để mỗi lần poll không phải set lại ~10k ghế.
 import type { Listing, SeatAvailability } from "@/domain/seats/listings";
 import { rowKey } from "@/domain/seats/seat-id";
-import { STATUS_BY_CODE, type Tier } from "./availability";
+import {
+  STATUS_BY_CODE,
+  type DecodedAvailability,
+  type Tier,
+} from "./availability";
 
 export type StateValue = Readonly<
   Record<string, string | number | boolean | null>
@@ -23,6 +27,41 @@ export function seatStates(
       },
     ]),
   );
+}
+
+/**
+ * Ghế tải theo chunk: chỉ giữ ghế không trống (màu tier nằm ở property, seat-loader gắn khi thêm ghế).
+ * MapLibre áp lại toàn bộ feature-state của source mỗi lần một tile ghế load/reload, nên state phải
+ * thưa — tỉ lệ với số ghế đã bán/giữ, không phải cả venue.
+ */
+export function takenSeatStates(seats: readonly SeatAvailability[]): StateMap {
+  const taken = seats.filter((s) => s.status !== "available");
+  // color: null xoá màu feature-state còn sót nếu map trước đó chạy chế độ dựng cả venue
+  return new Map(
+    taken.map((s) => [
+      s.sid,
+      { color: null, status: STATUS_BY_CODE.indexOf(s.status) },
+    ]),
+  );
+}
+
+/** Theo `tiers` của layout: mỗi lần poll trả `tiers` cũ nên dùng lại được Map màu đã dựng */
+const colorsByLayout = new WeakMap<
+  readonly Tier[],
+  ReadonlyMap<string, string>
+>();
+
+/** sid → màu tier (ghế chưa gán tier vắng mặt); dựng một lần cho mỗi layout */
+export function seatColors(
+  availability: Pick<DecodedAvailability, "tiers" | "tierBySid">,
+): ReadonlyMap<string, string> {
+  const cached = colorsByLayout.get(availability.tiers);
+  if (cached) return cached;
+  const colors = new Map(
+    [...availability.tierBySid].map(([sid, tier]) => [sid, tier.color]),
+  );
+  colorsByLayout.set(availability.tiers, colors);
+  return colors;
 }
 
 type PricedListing = Pick<Listing, "section" | "row" | "price" | "tierId">;

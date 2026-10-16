@@ -15,8 +15,10 @@ import { buildStyle, MAX_ZOOM, MIN_ZOOM, SEAT_LEVEL } from "./build-style";
 import { flyHome, flyToSection, MAX_PITCH, TILT_THRESHOLD } from "./camera";
 import {
   rowStates,
+  seatColors,
   seatStates,
   sectionStates,
+  takenSeatStates,
   type StateMap,
 } from "./feature-states";
 import { labelFeatures } from "./labels";
@@ -92,6 +94,8 @@ function useMapData(
   venue: MapVenue | null,
   availability: DecodedAvailability | null,
   listings: readonly Listing[],
+  /** Ghế tải theo chunk: màu tier nằm ở property (seat-loader), state chỉ giữ ghế không trống */
+  chunked: boolean,
 ) {
   const sectionsById = useMemo(
     () => new Map(venue?.sections.map((s) => [s.id, s]) ?? []),
@@ -124,7 +128,9 @@ function useMapData(
         map,
         "seats",
         p.seats,
-        seatStates(availability.seats, availability.tierBySid),
+        chunked
+          ? takenSeatStates(availability.seats)
+          : seatStates(availability.seats, availability.tierBySid),
         { color: null, status: 0 },
       ),
       rows: applyStateDiff(map, "rows", p.rows, rowStates(listings, colorOf), {
@@ -138,7 +144,7 @@ function useMapData(
         { listed: false },
       ),
     };
-  }, [map, availability, listings, sectionsById]);
+  }, [map, availability, listings, sectionsById, chunked]);
 
   return sectionsById;
 }
@@ -153,6 +159,7 @@ export default function SeatMap(props: SeatMapProps) {
     venue,
     props.availability,
     props.listings,
+    props.overviewUrl !== null,
   );
   const prevSelection = useRef<readonly string[]>([]);
 
@@ -220,6 +227,10 @@ export default function SeatMap(props: SeatMapProps) {
     [selectedSection, flyRequest],
   );
   const onSeatsAdded = useSelectedSeatNumbers(map, venue, props.selection);
+  const colors = useMemo(
+    () => (availability ? seatColors(availability) : null),
+    [availability],
+  );
   useSectionSeats(
     map,
     venue,
@@ -227,6 +238,7 @@ export default function SeatMap(props: SeatMapProps) {
     pinnedSections,
     hoveredSection,
     onSeatsAdded,
+    colors,
   );
 
   const is3d = useTiltMode(map);
